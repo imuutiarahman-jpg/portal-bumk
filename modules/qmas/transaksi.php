@@ -1,0 +1,309 @@
+<?php
+require_once __DIR__ . '/../../config/app.php';
+require_login();
+require_unit('qmas');
+
+$title = 'Transaksi & Distribusi – Qmas';
+$activeUnit = 'qmas';
+$errors = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'lunas') {
+        $id = (int) ($_POST['id'] ?? 0);
+        $method = $_POST['pay_method'] ?? 'tunai';
+        if (!in_array($method, ['tunai', 'transfer'], true)) {
+            $errors[] = 'Metode pelunasan tidak valid.';
+        }
+        $bank = payment_bank($method, $_POST['bank'] ?? null);
+        if ($method === 'transfer' && $bank === null) {
+            $errors[] = 'Bank untuk transfer wajib dipilih (BSI / Muamalat).';
+        }
+        if (!$errors && $id > 0) {
+            run('UPDATE qmas_transactions SET payment_status=?, bank=?, lunas_date=NOW() WHERE id=?', [$method, $bank, $id]);
+            activity('qmas', 'Melunasi piutang #' . $id . ' via ' . payment_label($method, $bank));
+            flash_set('success', 'Piutang berhasil dilunasi via ' . payment_label($method, $bank) . '.');
+            redirect('/modules/qmas/transaksi.php');
+        }
+    }
+
+    if ($action === 'simpan') {
+        $customer = clean($_POST['customer_name'] ?? '');
+        $type = $_POST['customer_type'] ?? 'umum';
+        $status = $_POST['payment_status'] ?? 'tunai';
+        $pids = $_POST['product_id'] ?? [];
+        $qtys = $_POST['quantity'] ?? [];
+
+        if ($customer === '') $errors[] = 'Nama pelanggan/unit tujuan wajib diisi.';
+        if (!in_array($type, ['fakultas', 'mahasiswa', 'umum'], true)) $type = 'umum';
+        if (!in_array($status, ['tunai', 'transfer', 'piutang'], true)) $status = 'tunai';
+
+        $bank = payment_bank($status, $_POST['bank'] ?? null);
+        if ($status === 'transfer' && $bank === null) {
+            $errors[] = 'Bank untuk transfer wajib dipilih (BSI / Muamalat).';
+        }
+
+        $items = [];
+        foreach ($pids as $i => $pid) {
+            $pid = (int) $pid;
+            $qty = (int) ($qtys[$i] ?? 0);
+            if ($pid > 0 && $qty > 0) {
+                $p = row('SELECT * FROM qmas_products WHERE id=?', [$pid]);
+                if (!$p) { $errors[] = 'Produk tidak ditemukan.'; continue; }
+                if ($qty > (int) $p['stock']) { $errors[] = 'Stok ' . $p['name'] . ' tidak mencukupi.'; continue; }
+                $items[] = ['product' => $p, 'qty' => $qty, 'subtotal' => (float) $p['price'] * $qty];
+            }
+        }
+        if (!$items) $errors[] = 'Tambahkan minimal satu produk dengan jumlah lebih dari 0.';
+
+        if (!$errors) {
+            $pdo = db();
+            $pdo->beginTransaction();
+            try {
+                $no = transaction_no('QMS', 'qmas_transactions', 'transaction_no');
+                $total = 0;
+                foreach ($items as $it) $total += $it['subtotal'];
+
+                run('INSERT INTO qmas_transactions (transaction_no,transaction_date,customer_name,customer_type,payment_status,bank,total_amount,user_id,created_at) VALUES (?,NOW(),?,?,?,?,?,?,NOW())',
+                    [$no, $customer, $type, $status, $bank, $total, current_user()['id']]);
+                $trxId = last_id();
+
+                foreach ($items as $it) {
+                    run('INSERT INTO qmas_transaction_items (transaction_id,product_id,quantity,unit_price,subtotal) VALUES (?,?,?,?,?)',
+                        [$trxId, $it['product']['id'], $it['qty'], $it['product']['price'], $it['subtotal']]);
+                    run('UPDATE qmas_products SET stock = stock - ? WHERE id=?', [$it['qty'], $it['product']['id']]);
+                }
+                $pdo->commit();
+                activity('qmas', 'Transaksi baru ' . $no . ' (' . rupiah($total) . ' via ' . payment_label($status, $bank) . ')');
+                flash_set('success', 'Transaksi ' . $no . ' berhasil disimpan.');
+                redirect('/modules/qmas/transaksi.php?detail=' . $trxId);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                $errors[] = 'Gagal menyimpan transaksi: ' . $e->getMessage();
+            }
+        }
+    }
+}
+
+$detail = null; $detailItems = [];
+if (!empty($_GET['detail'])) {
+    $detail = row('SELECT * FROM qmas_transactions WHERE id=?', [(int) $_GET['detail']]);
+    if ($detail) {
+        $detailItems = all('SELECT i.*, p.name product_name, p.size FROM qmas_transaction_items i JOIN qmas_products p ON p.id=i.product_id WHERE i.transaction_id=?', [$detail['id']]);
+    }
+}
+
+$filterStatus = $_GET['status'] ?? '';
+if (!in_array($filterStatus, ['tunai', 'transfer', 'piutang'], true)) $filterStatus = '';
+$where = $filterStatus ? 'WHERE payment_status = ?' : '';
+$params = $filterStatus ? [$filterStatus] : [];
+$list = all('SELECT * FROM qmas_transactions ' . $where . ' ORDER BY transaction_date DESC LIMIT 50', $params);
+$products = all('SELECT * FROM qmas_products WHERE is_active=1 ORDER BY name');
+
+require_once __DIR__ . '/../../includes/header.php';
+?>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div><h1 class="section-title mb-1"><i class="bi bi-receipt" style="color:var(--qmas)"></i> Transaksi & Distribusi</h1><div class="text-muted small">Input penjualan cepat & pencatatan pengiriman ke unit/fakultas</div></div>
+</div>
+
+<?php if ($errors): ?><div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
+
+<?php if ($detail): ?>
+<div class="card content-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Detail Transaksi <b><?= e($detail['transaction_no']) ?></b></span>
+        <a href="<?= base_url('/modules/qmas/transaksi.php') ?>" class="btn btn-sm btn-outline-secondary">Tutup</a>
+    </div>
+    <div class="card-body">
+        <div class="row small mb-3">
+            <div class="col-md-3"><b>Pelanggan:</b> <?= e($detail['customer_name']) ?></div>
+            <div class="col-md-3"><b>Jenis:</b> <?= e(ucfirst($detail['customer_type'])) ?></div>
+            <div class="col-md-3"><b>Waktu:</b> <?= tgl($detail['transaction_date'], true) ?></div>
+            <div class="col-md-3"><b>Status:</b> <span class="badge bg-<?= payment_badge($detail['payment_status']) ?>"><?= e(payment_label($detail['payment_status'], $detail['bank'])) ?></span></div>
+        </div>
+        <table class="table table-sm">
+            <thead class="table-light"><tr><th>Produk</th><th>Ukuran</th><th class="text-end">Qty</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr></thead>
+            <tbody><?php foreach ($detailItems as $it): ?><tr>
+                <td><?= e($it['product_name']) ?></td><td><?= e($it['size']) ?></td>
+                <td class="text-end"><?= angka($it['quantity']) ?></td><td class="text-end"><?= rupiah($it['unit_price']) ?></td><td class="text-end fw-semibold"><?= rupiah($it['subtotal']) ?></td>
+            </tr><?php endforeach; ?></tbody>
+            <tfoot><tr class="fw-bold"><td colspan="4" class="text-end">TOTAL</td><td class="text-end text-primary"><?= rupiah($detail['total_amount']) ?></td></tr></tfoot>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card content-card">
+            <div class="card-header">Input Penjualan Cepat</div>
+            <div class="card-body">
+                <form method="post" id="formTransaksi">
+                    <?php csrf_field(); ?>
+                    <input type="hidden" name="action" value="simpan">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Nama Pelanggan / Unit Tujuan</label>
+                        <input name="customer_name" class="form-control" placeholder="mis. Fakultas Agama Islam" required>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6"><label class="form-label small fw-semibold">Jenis Pelanggan</label>
+                            <select name="customer_type" class="form-select"><option value="umum">Umum</option><option value="mahasiswa">Mahasiswa</option><option value="fakultas">Fakultas/Unit</option></select>
+                        </div>
+                        <div class="col-6"><label class="form-label small fw-semibold">Status Bayar</label>
+                            <select name="payment_status" id="paymentStatus" class="form-select">
+                                <option value="tunai">Tunai</option>
+                                <option value="transfer">Transfer</option>
+                                <option value="piutang">Piutang</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="bankGroup" style="display:none">
+                        <label class="form-label small fw-semibold">Bank Transfer</label>
+                        <select name="bank" id="bankSelect" class="form-select">
+                            <option value="">-- Pilih Bank --</option>
+                            <option value="BSI">BSI (Bank Syariah Indonesia)</option>
+                            <option value="MUAMALAT">Muamalat</option>
+                        </select>
+                    </div>
+                    <label class="form-label small fw-semibold">Item Penjualan</label>
+                    <div id="itemRows">
+                        <div class="row g-2 item-row mb-2">
+                            <div class="col-8"><select name="product_id[]" class="form-select form-select-sm" required><?php foreach ($products as $p): ?><option value="<?= $p['id'] ?>"><?= e($p['name']) ?> (<?= rupiah($p['price']) ?>)</option><?php endforeach; ?></select></div>
+                            <div class="col-4"><input type="number" name="quantity[]" class="form-control form-control-sm" min="1" value="1" required></div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary mb-3" id="addRow"><i class="bi bi-plus"></i> Tambah Item</button>
+                    <button type="submit" class="btn w-100 text-white fw-bold" style="background:var(--qmas)"><i class="bi bi-check2-circle"></i> Simpan Transaksi</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card content-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Riwayat Transaksi</span>
+                <div class="btn-group btn-group-sm">
+                    <a href="<?= base_url('/modules/qmas/transaksi.php') ?>" class="btn btn-outline-secondary <?= $filterStatus===''?'active':'' ?>">Semua</a>
+                    <a href="<?= base_url('/modules/qmas/transaksi.php?status=tunai') ?>" class="btn btn-outline-success <?= $filterStatus==='tunai'?'active':'' ?>">Tunai</a>
+                    <a href="<?= base_url('/modules/qmas/transaksi.php?status=transfer') ?>" class="btn btn-outline-primary <?= $filterStatus==='transfer'?'active':'' ?>">Transfer</a>
+                    <a href="<?= base_url('/modules/qmas/transaksi.php?status=piutang') ?>" class="btn btn-outline-warning <?= $filterStatus==='piutang'?'active':'' ?>">Piutang</a>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light"><tr><th>No. Transaksi</th><th>Tanggal</th><th>Pelanggan</th><th class="text-end">Total</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                    <?php if (!$list): ?><tr><td colspan="6" class="empty-state">Belum ada transaksi.</td></tr><?php endif; ?>
+                    <?php foreach ($list as $t): ?>
+                        <tr>
+                            <td class="small"><?= e($t['transaction_no']) ?></td>
+                            <td class="small"><?= tgl($t['transaction_date'], true) ?></td>
+                            <td class="small"><?= e($t['customer_name']) ?></td>
+                            <td class="text-end fw-semibold"><?= rupiah($t['total_amount']) ?></td>
+                            <td><span class="badge bg-<?= payment_badge($t['payment_status']) ?>"><?= e(payment_label($t['payment_status'], $t['bank'])) ?></span></td>
+                            <td class="text-nowrap">
+                                <a href="<?= base_url('/modules/qmas/transaksi.php?detail='.$t['id']) ?>" class="btn btn-sm btn-outline-primary py-0">Detail</a>
+                                <?php if ($t['payment_status'] === 'piutang'): ?>
+                                <button type="button" class="btn btn-sm btn-outline-success py-0 btn-lunas" data-id="<?= $t['id'] ?>" data-no="<?= e($t['transaction_no']) ?>">Lunas</button>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pelunasan piutang -->
+<div class="modal fade" id="lunasModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post">
+                <?php csrf_field(); ?>
+                <input type="hidden" name="action" value="lunas">
+                <input type="hidden" name="id" id="lunasId">
+                <div class="modal-header">
+                    <h5 class="modal-title">Tandai Lunas</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light py-2 small mb-3">Transaksi: <b id="lunasNo"></b></div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Metode Pembayaran</label>
+                        <select name="pay_method" id="lunasMethod" class="form-select">
+                            <option value="tunai">Tunai</option>
+                            <option value="transfer">Transfer</option>
+                        </select>
+                    </div>
+                    <div id="lunasBankGroup" style="display:none">
+                        <label class="form-label small fw-semibold">Bank Transfer</label>
+                        <select name="bank" id="lunasBank" class="form-select">
+                            <option value="">-- Pilih Bank --</option>
+                            <option value="BSI">BSI (Bank Syariah Indonesia)</option>
+                            <option value="MUAMALAT">Muamalat</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-sm text-white fw-bold" style="background:var(--qmas)">Simpan Pelunasan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+document.getElementById('addRow').addEventListener('click', function () {
+    var wrap = document.getElementById('itemRows');
+    var row = wrap.querySelector('.item-row').cloneNode(true);
+    row.querySelector('input[name="quantity[]"]').value = 1;
+    wrap.appendChild(row);
+});
+
+// Tampilkan pilihan bank hanya saat status Transfer (form transaksi baru)
+var statusSelect = document.getElementById('paymentStatus');
+var bankGroup = document.getElementById('bankGroup');
+var bankSelect = document.getElementById('bankSelect');
+function toggleBank() {
+    var isTransfer = statusSelect.value === 'transfer';
+    bankGroup.style.display = isTransfer ? '' : 'none';
+    bankSelect.required = isTransfer;
+    if (!isTransfer) bankSelect.value = '';
+}
+statusSelect.addEventListener('change', toggleBank);
+toggleBank();
+
+// Modal pelunasan piutang (hanya kalau Bootstrap tersedia)
+if (typeof bootstrap !== 'undefined') {
+    var lunasModal = new bootstrap.Modal(document.getElementById('lunasModal'));
+    document.querySelectorAll('.btn-lunas').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.getElementById('lunasId').value = btn.dataset.id;
+            document.getElementById('lunasNo').textContent = btn.dataset.no;
+            document.getElementById('lunasMethod').value = 'tunai';
+            document.getElementById('lunasBank').value = '';
+            toggleLunasBank();
+            lunasModal.show();
+        });
+    });
+}
+var lunasMethod = document.getElementById('lunasMethod');
+var lunasBankGroup = document.getElementById('lunasBankGroup');
+var lunasBank = document.getElementById('lunasBank');
+function toggleLunasBank() {
+    var isTransfer = lunasMethod.value === 'transfer';
+    lunasBankGroup.style.display = isTransfer ? '' : 'none';
+    lunasBank.required = isTransfer;
+}
+lunasMethod.addEventListener('change', toggleLunasBank);
+});
+</script>
+
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>

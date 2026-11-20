@@ -1,0 +1,11 @@
+,TANGGAL,NAMA PELANGGAN,TGL LUNAS,TGL SETOR,PRODUK,,,,,,,,,,,,,,,,PENERIMAAN KAS,,,KET
+,,,,,QMAS GL 19L,,,QMAS 240 ML,,,QMAS 330ML,,,QMAS 600 ML,,,QMAS 1.5L,,,,CASH,BANK,TAGIHAN,
+,,,,,QTT,PRICE,HPP,QTT,PRICE,HPP,QTT,PRICE,HPP,QTT,PRICE,HPP,QTT,PRICE,HPP,LABA/RUGI,,,,
+,BULAN JANUARI,,,,,,,,,,,,,,,,,,,,,,,
+,5 Jan 2026,Pak Oyi,Lunas,09/01/2026,1,Rp23.000,Rp17.000,,,,,,,,,,,,,,,Rp23.000,,Bank BSI
+,6 Jan 2026,Mahasiswa,Lunas,09/01/2026,,,,1,Rp24.000,Rp19.000,,,,,,,,,,,,Rp24.000,,Bank BSI
+,6 Jan 2026,Ibu Meyti (Cafemu),Lunas,09/01/2026,,,,,,,,,,2,Rp60.000,Rp54.000,,,,,,Rp120.000,,TF BSI
+,7 Jan 2026,Rektorat,07/01/2026,09/01/2026,,,,14,Rp24.000,Rp19.000,,,,5,Rp60.000,Rp54.000,,,,,,Rp636.000,,Bank BSI
+,8 Jan 2026,Mahasiswa,Lunas,09/01/2026,,,,,,,2,Rp52.000,Rp44.000,,,,,,,,,Rp104.000,,TF Muamalat
+,10 Jan 2026,Fis,,,,,,,,,,,,,,,,,,,,,Rp48.000,Belum Bayar
+,11 Jan 2026,Daqam Coffe,,,,,,,,,,,,,,,,,,,Rp65.000,,,Cash/Tunai
