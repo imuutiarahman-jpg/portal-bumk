@@ -29,12 +29,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'hapus') {
+        $id = (int) ($_POST['id'] ?? 0);
+        $typed = strtoupper(clean($_POST['confirm_no'] ?? ''));
+        $t = $id > 0 ? row('SELECT * FROM qmas_transactions WHERE id=?', [$id]) : null;
+
+        if (!$t) {
+            flash_set('danger', 'Transaksi tidak ditemukan.');
+        } elseif ($typed !== strtoupper((string) $t['transaction_no'])) {
+            flash_set('danger', 'Nomor transaksi yang diketik tidak sesuai. Hapus dibatalkan.');
+        } else {
+            $pdo = db();
+            $pdo->beginTransaction();
+            try {
+                $items = all('SELECT product_id, quantity FROM qmas_transaction_items WHERE transaction_id=?', [$id]);
+                $isManual = empty($t['import_batch']);
+
+                // Transaksi manual mengurangi stok saat disimpan → kembalikan saat dihapus.
+                // Transaksi hasil import tidak pernah mengurangi stok, jadi tidak dikembalikan.
+                if ($isManual) {
+                    foreach ($items as $it) {
+                        run('UPDATE qmas_products SET stock = stock + ? WHERE id=?',
+                            [(int) $it['quantity'], (int) $it['product_id']]);
+                    }
+                }
+
+                // Item ikut terhapus otomatis (ON DELETE CASCADE).
+                run('DELETE FROM qmas_transactions WHERE id=?', [$id]);
+                $pdo->commit();
+
+                activity('qmas', 'Hapus transaksi ' . $t['transaction_no']
+                    . ' (' . rupiah($t['total_amount']) . ' · ' . $t['customer_name'] . ')'
+                    . ($isManual ? ' · stok dikembalikan' : ' · transaksi import'));
+                flash_set('success', 'Transaksi ' . $t['transaction_no'] . ' berhasil dihapus.'
+                    . ($isManual ? ' Stok produk sudah dikembalikan.' : ''));
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                flash_set('danger', 'Gagal menghapus transaksi: ' . $e->getMessage());
+            }
+        }
+        redirect('/modules/qmas/transaksi.php');
+    }
+
     if ($action === 'simpan') {
         $customer = clean($_POST['customer_name'] ?? '');
         $type = $_POST['customer_type'] ?? 'umum';
         $status = $_POST['payment_status'] ?? 'tunai';
         $pids = $_POST['product_id'] ?? [];
         $qtys = $_POST['quantity'] ?? [];
+        if (!is_array($pids)) $pids = [$pids];
+        if (!is_array($qtys)) $qtys = [$qtys];
 
         if ($customer === '') $errors[] = 'Nama pelanggan/unit tujuan wajib diisi.';
         if (!in_array($type, ['fakultas', 'mahasiswa', 'umum'], true)) $type = 'umum';
@@ -209,6 +253,15 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <?php if ($t['payment_status'] === 'piutang'): ?>
                                 <button type="button" class="btn btn-sm btn-outline-success py-0 btn-lunas" data-id="<?= $t['id'] ?>" data-no="<?= e($t['transaction_no']) ?>">Lunas</button>
                                 <?php endif; ?>
+                                <button type="button" class="btn btn-sm btn-outline-danger py-0 btn-hapus"
+                                    data-id="<?= $t['id'] ?>"
+                                    data-no="<?= e($t['transaction_no']) ?>"
+                                    data-customer="<?= e($t['customer_name']) ?>"
+                                    data-date="<?= e(tgl($t['transaction_date'], true)) ?>"
+                                    data-total="<?= e(rupiah($t['total_amount'])) ?>"
+                                    data-status="<?= e(payment_label($t['payment_status'], $t['bank'])) ?>"
+                                    data-manual="<?= empty($t['import_batch']) ? '1' : '0' ?>"
+                                    aria-label="Hapus transaksi <?= e($t['transaction_no']) ?>"><i class="bi bi-trash"></i> Hapus</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -252,6 +305,46 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div class="modal-footer">
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
                     <button type="submit" class="btn btn-sm text-white fw-bold" style="background:var(--qmas)">Simpan Pelunasan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal hapus transaksi -->
+<div class="modal fade" id="hapusModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post">
+                <?php csrf_field(); ?>
+                <input type="hidden" name="action" value="hapus">
+                <input type="hidden" name="id" id="hapusId">
+                <div class="modal-header">
+                    <h5 class="modal-title text-danger"><i class="bi bi-trash"></i> Hapus Transaksi</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger py-2 small">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i> Tindakan ini <b>permanen</b>. Transaksi akan hilang dari omzet, piutang, dan laporan.
+                    </div>
+                    <table class="table table-sm mb-3">
+                        <tbody>
+                            <tr><th class="w-25">No. Transaksi</th><td id="hapusNo" class="fw-semibold"></td></tr>
+                            <tr><th>Pelanggan</th><td id="hapusCustomer"></td></tr>
+                            <tr><th>Waktu</th><td id="hapusDate"></td></tr>
+                            <tr><th>Total</th><td id="hapusTotal" class="fw-semibold"></td></tr>
+                            <tr><th>Status</th><td id="hapusStatus"></td></tr>
+                            <tr><th>Dampak stok</th><td id="hapusDampak"></td></tr>
+                        </tbody>
+                    </table>
+                    <div class="mb-0">
+                        <label class="form-label" for="confirmNo">Ketik nomor transaksi <b id="hapusNoText" class="text-danger"></b> untuk konfirmasi</label>
+                        <input type="text" id="confirmNo" name="confirm_no" class="form-control" placeholder="Nomor transaksi" autocomplete="off" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-sm btn-danger fw-bold" id="hapusSubmit" disabled><i class="bi bi-trash"></i> Hapus Permanen</button>
                 </div>
             </form>
         </div>
@@ -303,6 +396,36 @@ function toggleLunasBank() {
     lunasBank.required = isTransfer;
 }
 lunasMethod.addEventListener('change', toggleLunasBank);
+
+// Modal hapus transaksi: konfirmasi dengan mengetik nomor transaksi
+if (typeof bootstrap !== 'undefined') {
+    var hapusModal = new bootstrap.Modal(document.getElementById('hapusModal'));
+    var confirmNo = document.getElementById('confirmNo');
+    var hapusSubmit = document.getElementById('hapusSubmit');
+    var hapusNoText = document.getElementById('hapusNoText');
+
+    document.querySelectorAll('.btn-hapus').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.getElementById('hapusId').value = btn.dataset.id;
+            document.getElementById('hapusNo').textContent = btn.dataset.no;
+            document.getElementById('hapusCustomer').textContent = btn.dataset.customer;
+            document.getElementById('hapusDate').textContent = btn.dataset.date;
+            document.getElementById('hapusTotal').textContent = btn.dataset.total;
+            document.getElementById('hapusStatus').textContent = btn.dataset.status;
+            document.getElementById('hapusDampak').textContent = btn.dataset.manual === '1'
+                ? 'Stok produk akan dikembalikan.'
+                : 'Transaksi import — stok tidak diubah.';
+            hapusNoText.textContent = btn.dataset.no;
+            confirmNo.value = '';
+            hapusSubmit.disabled = true;
+            hapusModal.show();
+        });
+    });
+
+    confirmNo.addEventListener('input', function () {
+        hapusSubmit.disabled = this.value.trim().toUpperCase() !== hapusNoText.textContent.trim().toUpperCase();
+    });
+}
 });
 </script>
 
