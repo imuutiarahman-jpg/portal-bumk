@@ -35,6 +35,7 @@ function imp_date(string $s, ?int $defaultYear = null): ?string
 {
     $s = trim($s, " \t\n\r\0\x0B`'\""); // buang backtick/tanda kutip dari Sheets
     if ($s === '') return null;
+    $s = preg_replace('#/+#', '/', $s); // "03/06//2025" → "03/06/2025"
 
     // Buang bagian jam agar format "01/11/2025 00:00:00" tetap dikenali.
     $s = preg_replace('/\s+\d{1,2}:\d{2}(?::\d{2})?\s*$/', '', $s);
@@ -305,11 +306,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             rewind($handle);
             $delim = imp_detect_delimiter($firstLine);
 
+            // Deteksi tahun dari keterangan sheet (mis. "PERIODE 2025").
+            $detectedYear = null;
+            $scan = fopen($sourcePath, 'r');
+            while (($r = fgetcsv($scan, 0, $delim)) !== false) {
+                $headText = strtoupper(implode(' ', $r));
+                if (preg_match('/PERIODE\s*((?:19|20)\d{2})/', $headText, $ym)) {
+                    $detectedYear = (int) $ym[1];
+                    break;
+                }
+            }
+            fclose($scan);
+
+            $currentYear = (int) date('Y');
             $yearRaw = (int) ($_POST['default_year'] ?? 0);
-            $defaultYear = ($yearRaw >= 2000 && $yearRaw <= 2100) ? $yearRaw : (int) date('Y');
+            $postedExplicit = $yearRaw >= 2000 && $yearRaw <= 2100 && $yearRaw !== $currentYear;
+            $defaultYear = $postedExplicit ? $yearRaw : ($detectedYear ?: $currentYear);
+            if ($postedExplicit && $detectedYear && $yearRaw !== $detectedYear) {
+                $warnings[] = 'Tahun manual (' . $yearRaw . ') berbeda dengan tahun yang terdeteksi dari sheet (' . $detectedYear . ').';
+            }
             $batchMode = ($_POST['batch_mode'] ?? 'replace') === 'append' ? 'append' : 'replace';
 
-            $rows = []; $skipped = []; $warnings = []; $qtyByProduct = [];
+            $rows = []; $skipped = []; $warnings = []; $qtyByProduct = []; $monthCount = [];
             $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = '';
             $headerCols = []; $labelRows = []; $colMap = null;
             while (($cols = fgetcsv($handle, 0, $delim)) !== false) {
@@ -377,6 +395,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $cash       = imp_money($field('cash', 20));
                 $tagihan    = imp_money($field('tagihan', 22));
                 $ket        = $field('ket', 23);
+                if ($bankAmount > 0 && $tagihan > 0 && count($warnings) < 50) {
+                    $warnings[] = "Baris $lineNo: BANK dan TAGIHAN keduanya terisi — prioritas BANK dipakai (TAGIHAN tidak dihitung ganda)";
+                }
 
                 $products = imp_products();
                 $productDefs = [];
@@ -443,6 +464,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sku = $it['product']['sku'];
                     $qtyByProduct[$sku] = ($qtyByProduct[$sku] ?? 0) + $it['qty'];
                 }
+                $monthKey = date('Y-m', strtotime($date));
+                $monthCount[$monthKey] = ($monthCount[$monthKey] ?? 0) + 1;
 
                 // PENERIMAAN KAS: BANK → Transfer, CASH → Tunai, TAGIHAN → Piutang
                 if ($bankAmount > 0) {
@@ -502,7 +525,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['qmas_import'] = [
                     'batch' => $batch, 'batch_mode' => $batchMode, 'filename' => $sourceName,
                     'rows' => $rows, 'skipped' => $skipped, 'warnings' => $warnings,
-                    'qty_by_product' => $qtyByProduct,
+                    'qty_by_product' => $qtyByProduct, 'month_count' => $monthCount,
+                    'detected_year' => $detectedYear,
                     'default_year' => $defaultYear, 'column_map' => $colMap,
                 ];
                 $preview = $_SESSION['qmas_import'];
@@ -596,8 +620,15 @@ require_once __DIR__ . '/../../includes/header.php';
         <?php if ($preview['skipped']): ?>
             <div class="alert alert-warning small py-2"><b><?= count($preview['skipped']) ?> baris dilewati:</b><br><?= e(implode(' · ', array_slice($preview['skipped'], 0, 10))) ?><?= count($preview['skipped']) > 10 ? ' …' : '' ?></div>
         <?php endif; ?>
-        <?php if (!empty($preview['warnings'])): ?>
-            <div class="alert alert-info small py-2"><b>Perlu diperiksa (<?= count($preview['warnings']) ?>):</b><br><?= e(implode(' · ', array_slice($preview['warnings'], 0, 10))) ?><?= count($preview['warnings']) > 10 ? ' …' : '' ?></div>
+        <?php if (!empty($preview['warnings'])):
+            $warnList = $preview['warnings'];
+            usort($warnList, function ($a, $b) {
+                $pa = str_contains($a, 'BANK dan TAGIHAN') ? 0 : 1;
+                $pb = str_contains($b, 'BANK dan TAGIHAN') ? 0 : 1;
+                return $pa <=> $pb;
+            });
+        ?>
+            <div class="alert alert-info small py-2"><b>Perlu diperiksa (<?= count($warnList) ?>):</b><br><?= e(implode(' · ', array_slice($warnList, 0, 10))) ?><?= count($warnList) > 10 ? ' …' : '' ?></div>
         <?php endif; ?>
         <?php if (!empty($preview['column_map'])):
             $cm = $preview['column_map'];
@@ -611,7 +642,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <div class="alert alert-light small py-2">
                 <b>Peta kolom terdeteksi:</b> <?= e(implode(' · ', $mapInfo)) ?><br>
                 <b>Produk:</b> <?= e(implode(' · ', $prodInfo) ?: '-') ?>
-                <div class="mt-1">Batch: <b><?= e($preview['batch']) ?></b> · Mode: <?= $preview['batch_mode'] === 'append' ? 'batch baru' : 'timpa batch sama' ?></div>
+                <div class="mt-1">Tahun dipakai: <b><?= (int) $preview['default_year'] ?></b><?php if (!empty($preview['detected_year'])): ?> (terdeteksi dari sheet: <?= (int) $preview['detected_year'] ?>)<?php endif; ?> · Batch: <b><?= e($preview['batch']) ?></b> · Mode: <?= $preview['batch_mode'] === 'append' ? 'batch baru' : 'timpa batch sama' ?></div>
             </div>
         <?php endif; ?>
         <?php if (!empty($preview['qty_by_product'])):
@@ -625,6 +656,15 @@ require_once __DIR__ . '/../../includes/header.php';
             }
         ?>
             <div class="alert alert-success small py-2"><b>Total QTT per produk (sesuai sheet):</b> <?= e(implode(' · ', $qtyInfo)) ?></div>
+        <?php endif; ?>
+        <?php if (!empty($preview['month_count'])):
+            ksort($preview['month_count']);
+            $monthInfo = [];
+            foreach ($preview['month_count'] as $m => $n) {
+                $monthInfo[] = date('M Y', strtotime($m . '-01')) . ': ' . angka($n);
+            }
+        ?>
+            <div class="alert alert-light small py-2"><b>Distribusi per bulan:</b> <?= e(implode(' · ', $monthInfo)) ?></div>
         <?php endif; ?>
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
