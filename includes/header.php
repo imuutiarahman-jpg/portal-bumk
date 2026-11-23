@@ -45,9 +45,10 @@ $unitMenus = [
     <title><?= e($title ?? APP_NAME) ?> · <?= APP_NAME ?></title>
     <meta name="description" content="Portal Sistem Informasi Unit Usaha Badan Usaha Milik Kampus Universitas Muhammadiyah Gorontalo.">
     <meta name="theme-color" content="#0B4F3E">
+    <link rel="icon" type="image/png" href="<?= base_url('/logo/images.png') ?>">
     <link href="<?= base_url('/assets/vendor/bootstrap/bootstrap.min.css') ?>?v=1" rel="stylesheet" onerror="this.href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css'">
     <link href="<?= base_url('/assets/vendor/bootstrap-icons/bootstrap-icons.min.css') ?>?v=1" rel="stylesheet">
-    <link href="<?= base_url('/assets/css/style.css') ?>?v=4" rel="stylesheet">
+    <link href="<?= base_url('/assets/css/style.css') ?>?v=6" rel="stylesheet">
     <script src="<?= base_url('/assets/vendor/bootstrap/bootstrap.bundle.min.js') ?>?v=2"></script>
     <script>window.bootstrap || document.write('<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"><\/script>');</script>
     <script src="<?= base_url('/assets/vendor/chartjs/chart.umd.min.js') ?>?v=1"></script>
@@ -61,8 +62,8 @@ $unitMenus = [
             <button class="btn mobile-menu-btn" type="button" id="menuToggle" aria-label="Buka menu navigasi" aria-expanded="false" aria-controls="appSidebar"><i class="bi bi-list"></i></button>
         <?php endif; ?>
         <a href="<?= base_url('/modules/portal/index.php') ?>" class="d-flex align-items-center gap-2 text-decoration-none text-dark" aria-label="Portal BUMK UMGO – beranda">
-            <span class="logo-badge">UMGO</span>
-            <span class="logo-badge bumk">BUMK</span>
+            <img src="<?= base_url('/logo/images.png') ?>" alt="Lambang UMGO" class="header-logo umgo">
+            <span class="logo-crop"><img src="<?= base_url('/logo/logobumk.jpeg') ?>" alt="Logo BUMK UMGO" class="header-logo bumk"></span>
             <span class="portal-title ms-1 d-none d-lg-block">Portal Sistem Informasi Unit Usaha BUMK UMGO<small>Terintegrasi · Qmas · SM Corner · Daqam</small></span>
         </a>
         <nav class="header-nav d-flex align-items-center" aria-label="Navigasi utama">

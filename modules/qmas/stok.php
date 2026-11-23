@@ -108,6 +108,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect('/modules/qmas/stok.php#galon');
     }
+
+    if ($action === 'hapus_tukar') {
+        $id = (int) ($_POST['id'] ?? 0);
+        $g = $id > 0 ? row('SELECT * FROM qmas_gallon_exchanges WHERE id=?', [$id]) : null;
+        if (!$g) {
+            flash_set('danger', 'Data tukar galon tidak ditemukan.');
+        } else {
+            run('DELETE FROM qmas_gallon_exchanges WHERE id=?', [$id]);
+            activity('qmas', 'Hapus catatan tukar galon #' . $id . ' (' . $g['customer_name'] . ')');
+            flash_set('success', 'Catatan tukar galon ' . $g['customer_name'] . ' dihapus.');
+        }
+        redirect('/modules/qmas/stok.php#galon');
+    }
 }
 
 $products = all('SELECT * FROM qmas_products WHERE is_active = 1 ORDER BY kind, name');
@@ -231,12 +244,19 @@ require_once __DIR__ . '/../../includes/header.php';
             <div class="card content-card">
                 <div class="card-header">Riwayat Sirkulasi Galon</div>
                 <div class="table-responsive"><table class="table table-sm mb-0">
-                    <thead class="table-light"><tr><th>Waktu</th><th>Pelanggan</th><th class="text-end">Penuh Keluar</th><th class="text-end">Kosong Masuk</th><th>Catatan</th></tr></thead>
-                    <tbody><?php if (!$exchanges): ?><tr><td colspan="5" class="empty-state">Belum ada data.</td></tr><?php endif; ?>
+                    <thead class="table-light"><tr><th>Waktu</th><th>Pelanggan</th><th class="text-end">Penuh Keluar</th><th class="text-end">Kosong Masuk</th><th>Catatan</th><th></th></tr></thead>
+                    <tbody><?php if (!$exchanges): ?><tr><td colspan="6" class="empty-state">Belum ada data.</td></tr><?php endif; ?>
                     <?php foreach ($exchanges as $g): ?><tr>
                         <td class="small"><?= tgl($g['exchange_date'], true) ?></td><td class="small"><?= e($g['customer_name']) ?></td>
                         <td class="text-end"><?= angka($g['full_out']) ?></td><td class="text-end"><?= angka($g['empty_in']) ?></td>
                         <td class="small text-muted"><?= e($g['notes']) ?></td>
+                        <td class="text-nowrap"><button type="button" class="btn btn-sm btn-outline-danger py-0 btn-hapus-tukar"
+                            data-id="<?= $g['id'] ?>"
+                            data-date="<?= e(tgl($g['exchange_date'], true)) ?>"
+                            data-customer="<?= e($g['customer_name']) ?>"
+                            data-full="<?= angka($g['full_out']) ?>"
+                            data-empty="<?= angka($g['empty_in']) ?>"
+                            aria-label="Hapus catatan tukar galon <?= e($g['customer_name']) ?>"><i class="bi bi-trash"></i> Hapus</button></td>
                     </tr><?php endforeach; ?></tbody>
                 </table></div>
             </div>
@@ -290,6 +310,30 @@ require_once __DIR__ . '/../../includes/header.php';
     </div></div>
 </div>
 
+<!-- Modal hapus catatan tukar galon -->
+<div class="modal fade" id="hapusTukarModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="post">
+            <?php csrf_field(); ?>
+            <input type="hidden" name="action" value="hapus_tukar">
+            <input type="hidden" name="id" id="hapusTukarId">
+            <div class="modal-header"><h5 class="modal-title text-danger"><i class="bi bi-trash"></i> Hapus Catatan Tukar Galon</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+            <div class="modal-body">
+                <div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle-fill me-1"></i> Catatan ini akan dihapus permanen. Tidak berdampak pada stok maupun omzet.</div>
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr><th class="w-35">Waktu</th><td id="tukarInfoDate"></td></tr>
+                        <tr><th>Pelanggan</th><td id="tukarInfoCustomer"></td></tr>
+                        <tr><th>Penuh keluar</th><td id="tukarInfoFull"></td></tr>
+                        <tr><th>Kosong masuk</th><td id="tukarInfoEmpty"></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-sm btn-danger fw-bold"><i class="bi bi-trash"></i> Hapus</button></div>
+        </form>
+    </div></div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 if (typeof bootstrap === 'undefined') { console.warn('Bootstrap belum termuat — tombol modal tidak aktif.'); return; }
@@ -335,6 +379,18 @@ document.getElementById('hapusConfirm').addEventListener('input', function () {
     var ok = this.value === expectedName;
     document.getElementById('btnHapus').disabled = !ok;
     document.getElementById('hapusInfo').textContent = ok ? 'Nama cocok. Tombol hapus sudah aktif.' : '';
+});
+
+var tukarModal = new bootstrap.Modal(document.getElementById('hapusTukarModal'));
+document.querySelectorAll('.btn-hapus-tukar').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        document.getElementById('hapusTukarId').value = btn.dataset.id;
+        document.getElementById('tukarInfoDate').textContent = btn.dataset.date;
+        document.getElementById('tukarInfoCustomer').textContent = btn.dataset.customer;
+        document.getElementById('tukarInfoFull').textContent = btn.dataset.full + ' galon';
+        document.getElementById('tukarInfoEmpty').textContent = btn.dataset.empty + ' galon';
+        tukarModal.show();
+    });
 });
 });
 </script>

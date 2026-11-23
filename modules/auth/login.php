@@ -42,9 +42,9 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="login-wrap">
             <div class="login-aside">
                 <div>
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="logo-badge">UMGO</span>
-                        <span class="logo-badge bumk">BUMK</span>
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="login-logo-wrap"><img src="<?= base_url('/logo/logobumk.jpeg') ?>" alt="Logo BUMK UMGO" class="login-logo bumk"></span>
+                        <img src="<?= base_url('/logo/images.png') ?>" alt="Lambang UMGO" class="login-logo umgo">
                     </div>
                     <h2>Satu portal untuk seluruh unit usaha kampus.</h2>
                     <p>Kelola transaksi, stok, dan laporan keuangan Qmas Air Mineral, SM Corner, serta Daqam Caffe dari satu tempat.</p>

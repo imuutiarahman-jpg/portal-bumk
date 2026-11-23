@@ -31,34 +31,56 @@ function imp_int(string $s): int
     return (int) preg_replace('/\D/', '', trim($s));
 }
 
-function imp_date(string $s): ?string
+function imp_date(string $s, ?int $defaultYear = null): ?string
 {
     $s = trim($s, " \t\n\r\0\x0B`'\""); // buang backtick/tanda kutip dari Sheets
     if ($s === '') return null;
+
+    // Buang bagian jam agar format "01/11/2025 00:00:00" tetap dikenali.
+    $s = preg_replace('/\s+\d{1,2}:\d{2}(?::\d{2})?\s*$/', '', $s);
+
+    $resolveYear = function ($raw) use ($defaultYear): int {
+        $y = (int) $raw;
+        if ($y === 0) $y = $defaultYear ?: (int) date('Y');
+        elseif ($y < 100) $y += 2000;
+        return $y;
+    };
+
     if (preg_match('/^\d{5}$/', $s)) {
         return date('Y-m-d H:i:s', ((int) $s - 25569) * 86400);
     }
     if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $s, $m)) {
         return $m[1] . ' 00:00:00';
     }
-    if (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/', $s, $m)) {
-        $y = (int) $m[3];
-        if ($y < 100) $y += 2000;
-        return sprintf('%04d-%02d-%02d 00:00:00', $y, (int) $m[2], (int) $m[1]);
+    if (preg_match('/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/', $s, $m)) {
+        return sprintf('%04d-%02d-%02d 00:00:00', (int) $m[1], (int) $m[2], (int) $m[3]);
     }
+    if (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/', $s, $m)) {
+        return sprintf('%04d-%02d-%02d 00:00:00',
+            $resolveYear($m[3]), (int) $m[2], (int) $m[1]);
+    }
+
+    $months = [
+        'jan' => 1, 'januari' => 1, 'feb' => 2, 'februari' => 2, 'mar' => 3, 'maret' => 3,
+        'apr' => 4, 'april' => 4, 'mei' => 5, 'may' => 5, 'jun' => 6, 'juni' => 6,
+        'jul' => 7, 'juli' => 7, 'agu' => 8, 'agus' => 8, 'ags' => 8, 'agustus' => 8, 'aug' => 8,
+        'sep' => 9, 'sept' => 9, 'september' => 9, 'okt' => 10, 'okto' => 10, 'oktober' => 10, 'oct' => 10,
+        'nov' => 11, 'nop' => 11, 'november' => 11, 'des' => 12, 'desember' => 12, 'dec' => 12,
+    ];
+
+    // "5 Jan 2025" / "5 Jan" (tahun diambil dari input tahun default)
     if (preg_match('/^(\d{1,2})\s*([A-Za-z]+)\.?(?:\s+(\d{2,4}))?$/u', $s, $m)) {
-        $months = [
-            'jan' => 1, 'januari' => 1, 'feb' => 2, 'februari' => 2, 'mar' => 3, 'maret' => 3,
-            'apr' => 4, 'april' => 4, 'mei' => 5, 'may' => 5, 'jun' => 6, 'juni' => 6,
-            'jul' => 7, 'juli' => 7, 'agu' => 8, 'agus' => 8, 'ags' => 8, 'agustus' => 8, 'aug' => 8,
-            'sep' => 9, 'sept' => 9, 'september' => 9, 'okt' => 10, 'okto' => 10, 'oktober' => 10, 'oct' => 10,
-            'nov' => 11, 'nop' => 11, 'november' => 11, 'des' => 12, 'desember' => 12, 'dec' => 12,
-        ];
         $key = strtolower($m[2]);
         if (!isset($months[$key])) return null;
-        $y = !empty($m[3]) ? (int) $m[3] : (int) date('Y');
-        if ($y < 100) $y += 2000;
-        return sprintf('%04d-%02d-%02d 00:00:00', $y, $months[$key], (int) $m[1]);
+        return sprintf('%04d-%02d-%02d 00:00:00',
+            $resolveYear($m[3] ?? 0), $months[$key], (int) $m[1]);
+    }
+    // "Nov 5, 2025" / "November 5"
+    if (preg_match('/^([A-Za-z]+)\.?\s+(\d{1,2})(?:,?\s+(\d{2,4}))?$/u', $s, $m)) {
+        $key = strtolower($m[1]);
+        if (!isset($months[$key])) return null;
+        return sprintf('%04d-%02d-%02d 00:00:00',
+            $resolveYear($m[3] ?? 0), $months[$key], (int) $m[2]);
     }
     return null;
 }
@@ -202,6 +224,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             rewind($handle);
             $delim = imp_detect_delimiter($firstLine);
 
+            $yearRaw = (int) ($_POST['default_year'] ?? 0);
+            $defaultYear = ($yearRaw >= 2000 && $yearRaw <= 2100) ? $yearRaw : (int) date('Y');
+            $batchMode = ($_POST['batch_mode'] ?? 'replace') === 'append' ? 'append' : 'replace';
+
             $rows = []; $skipped = []; $warnings = []; $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = '';
             while (($cols = fgetcsv($handle, 0, $delim)) !== false) {
                 $lineNo++;
@@ -232,7 +258,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $dateRaw = $get(0);
                 if ($dateRaw !== '') $lastDateRaw = $dateRaw;
-                $date = imp_date($lastDateRaw);
+                $date = imp_date($lastDateRaw, $defaultYear);
                 $nama = $get(1);
                 if ($nama === '') continue;
                 if (!$date) { $skipped[] = "Baris $lineNo: tanggal '$lastDateRaw' tidak dikenali"; continue; }
@@ -243,7 +269,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $qty = imp_int($get($pc['qty']));
                     if ($qty < 1) continue;
                     $price = imp_money($get($pc['price']));
-                    $product = $products[$pc['sku']] ?? null;
+                    // 240 ML punya SKU lama QMS-G22 di sebagian database.
+                    $skus = $pc['sku'] === 'QMS-240' ? ['QMS-240', 'QMS-G22'] : [$pc['sku']];
+                    $product = null;
+                    foreach ($skus as $sku) {
+                        if (isset($products[$sku])) { $product = $products[$sku]; break; }
+                    }
                     if (!$product) { $skipped[] = "Baris $lineNo: produk {$pc['sku']} belum ada"; continue; }
                     if ($price <= 0) $price = (float) $product['price'];
                     $cost = $pc['hpp'] !== null ? imp_money($get($pc['hpp'])) : (float) $product['cost'];
@@ -272,16 +303,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $lunasRaw = $get(2);
-                $lunasDate = imp_date($lunasRaw);
+                $lunasDate = imp_date($lunasRaw, $defaultYear);
                 if (!$lunasDate && stripos($lunasRaw, 'lunas') !== false) {
-                    $lunasDate = imp_date($get(3)); // TGL LUNAS "Lunas" → pakai TGL SETOR
+                    $lunasDate = imp_date($get(3), $defaultYear); // TGL LUNAS "Lunas" → pakai TGL SETOR
                 }
 
                 $rows[] = [
                     'date'        => $date,
                     'nama'        => $nama,
                     'lunas_date'  => $lunasDate,
-                    'setor_date'  => imp_date($get(3)),
+                    'setor_date'  => imp_date($get(3), $defaultYear),
                     'status'      => $status,
                     'bank'        => $bank,
                     'total'       => $total,
@@ -301,7 +332,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = 'Tidak ada baris transaksi yang bisa dibaca.';
             } else {
                 $batch = strtolower(preg_replace('/[^a-z0-9]+/i', '-', pathinfo($sourceName, PATHINFO_FILENAME)));
-                $_SESSION['qmas_import'] = ['batch' => $batch, 'filename' => $sourceName, 'rows' => $rows, 'skipped' => $skipped, 'warnings' => $warnings];
+                $_SESSION['qmas_import'] = [
+                    'batch' => $batch, 'batch_mode' => $batchMode, 'filename' => $sourceName,
+                    'rows' => $rows, 'skipped' => $skipped, 'warnings' => $warnings,
+                    'default_year' => $defaultYear,
+                ];
                 $preview = $_SESSION['qmas_import'];
             }
             if ($tempFile) @unlink($tempFile);
@@ -322,15 +357,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = db();
             $pdo->beginTransaction();
             try {
-                run('DELETE FROM qmas_transactions WHERE import_batch = ?', [$data['batch']]);
-                $stamp = date('YmdHis');
+                $batch = $data['batch'];
+                if (($data['batch_mode'] ?? 'replace') === 'replace') {
+                    run('DELETE FROM qmas_transactions WHERE import_batch = ?', [$batch]);
+                } else {
+                    // Mode "batch baru": tidak hapus data lama, beri penanda unik.
+                    $batch .= '-' . date('YmdHis') . '-' . substr(bin2hex(random_bytes(3)), 0, 6);
+                }
+                $stamp = date('YmdHis') . '-' . substr(md5($batch), 0, 4);
                 foreach ($data['rows'] as $i => $r) {
                     $no = 'QMS-IMP-' . $stamp . '-' . str_pad((string) ($i + 1), 4, '0', STR_PAD_LEFT);
                     run('INSERT INTO qmas_transactions
                         (transaction_no,transaction_date,customer_name,customer_type,payment_status,bank,lunas_date,setor_date,total_amount,user_id,import_batch,created_at)
                         VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())', [
                         $no, $r['date'], $r['nama'], 'umum', $r['status'], $r['bank'],
-                        $r['lunas_date'], $r['setor_date'], $r['total'], current_user()['id'], $data['batch'],
+                        $r['lunas_date'], $r['setor_date'], $r['total'], current_user()['id'], $batch,
                     ]);
                     $tid = last_id();
                     foreach ($r['items'] as $it) {
@@ -434,6 +475,21 @@ require_once __DIR__ . '/../../includes/header.php';
                         <label class="form-label small fw-semibold"><i class="bi bi-file-earmark-spreadsheet"></i> File CSV</label>
                         <input type="file" name="csv" accept=".csv" class="form-control">
                         <div class="form-text small">Hasil "Save as CSV" dari Google Sheets / Excel.</div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label small fw-semibold" for="defaultYear">Tahun untuk tanggal tanpa tahun</label>
+                            <input type="number" id="defaultYear" name="default_year" class="form-control form-control-sm" min="2000" max="2100" value="<?= date('Y') ?>">
+                            <div class="form-text small">Isi <b>2025</b> jika sheet lama hanya menulis "5 Jan".</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label small fw-semibold" for="batchMode">Mode penyimpanan</label>
+                            <select id="batchMode" name="batch_mode" class="form-select form-select-sm">
+                                <option value="replace">Timpa batch nama file sama</option>
+                                <option value="append">Simpan sebagai batch baru</option>
+                            </select>
+                            <div class="form-text small">Pilih "batch baru" agar data lama tidak terhapus.</div>
+                        </div>
                     </div>
                     <button class="btn btn-primary"><i class="bi bi-eye"></i> Pratinjau</button>
                 </form>

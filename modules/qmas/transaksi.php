@@ -302,8 +302,8 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
     <div class="col-lg-7">
         <div class="card content-card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>Riwayat Transaksi</span>
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span>Riwayat Transaksi <small class="text-muted fw-normal">(50 terbaru)</small> · <a href="<?= base_url('/modules/qmas/rekap.php') ?>" class="small">Lihat Rekap →</a></span>
                 <div class="btn-group btn-group-sm">
                     <a href="<?= base_url('/modules/qmas/transaksi.php') ?>" class="btn btn-outline-secondary <?= $filterStatus===''?'active':'' ?>">Semua</a>
                     <a href="<?= base_url('/modules/qmas/transaksi.php?status=tunai') ?>" class="btn btn-outline-success <?= $filterStatus==='tunai'?'active':'' ?>">Tunai</a>

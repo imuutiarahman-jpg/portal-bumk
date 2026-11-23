@@ -104,6 +104,16 @@ img { max-width: 100%; }
     background: linear-gradient(135deg, var(--umgo-600), #34D399);
     box-shadow: 0 4px 10px rgba(16, 185, 129, .22);
 }
+.header-logo { display: block; flex: 0 0 auto; object-fit: contain; }
+.header-logo.umgo { height: 36px; width: auto; mix-blend-mode: multiply; }
+.logo-crop {
+    display: inline-flex; width: 38px; height: 38px; border-radius: 9px;
+    overflow: hidden; background: #fff; border: 1px solid var(--line); flex: 0 0 auto;
+}
+.logo-crop .header-logo.bumk {
+    width: 76px; height: 76px; max-width: none; border-radius: 0;
+    object-fit: fill; margin: -10px 0 0 -19px;
+}
 .portal-title { font-size: 14.5px; font-weight: 750; letter-spacing: -.2px; line-height: 1.15; }
 .portal-title small { display: block; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .2px; }
 .header-nav { gap: 6px !important; }
@@ -372,6 +382,15 @@ img { max-width: 100%; }
 }
 .login-aside > * { position: relative; z-index: 1; }
 .login-aside .logo-badge { background: rgba(255,255,255,.15); box-shadow: none; }
+.login-logo { display: block; object-fit: contain; }
+.login-logo.umgo { height: 46px; width: auto; mix-blend-mode: multiply; }
+.login-logo-wrap {
+    display: inline-flex; width: 56px; height: 56px; border-radius: 14px;
+    overflow: hidden; background: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.16); flex: 0 0 auto;
+}
+.login-logo-wrap .login-logo.bumk {
+    width: 112px; height: 112px; max-width: none; object-fit: fill; margin: -14px 0 0 -28px;
+}
 .login-aside h2 { color: #fff; font-weight: 800; font-size: 1.8rem; line-height: 1.22; margin: 30px 0 12px; letter-spacing: -.6px; }
 .login-aside p { color: rgba(255,255,255,.82); font-size: 13.5px; }
 .login-features { list-style: none; padding: 0; margin: 0; }
@@ -479,6 +498,12 @@ img { max-width: 100%; }
     .hero-metrics { gap: 16px; margin-top: 24px; }
     .hero-metric b { font-size: 13px; }
     .portal-title { display: none; }
+    .header-logo.umgo { height: 30px; }
+    .logo-crop { width: 32px; height: 32px; }
+    .logo-crop .header-logo.bumk { width: 64px; height: 64px; margin: -8px 0 0 -16px; }
+    .login-logo.umgo { height: 38px; }
+    .login-logo-wrap { width: 46px; height: 46px; }
+    .login-logo-wrap .login-logo.bumk { width: 92px; height: 92px; margin: -12px 0 0 -23px; }
     .portal-footer { padding: 12px 0; }
     .kpi-value { font-size: 1.32rem; }
     .page-head { gap: 10px; }

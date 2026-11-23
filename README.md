@@ -78,7 +78,7 @@ Portal Utama (landing: header 80px, hero 280px, 3 kartu unit, footer 70px)
   - **Hapus permanen**: hanya untuk produk yang **belum pernah dipakai transaksi**; konfirmasi harus **mengetik nama produk persis**. Produk yang sudah dipakai transaksi ditolak agar riwayat omzet/laba tidak rusak (foreign key `RESTRICT`). Tidak ada lagi tombol Nonaktifkan.
 - Bootstrap 5 disimpan lokal di `assets/vendor/bootstrap/` (CDN hanya fallback), agar modal tetap berfungsi tanpa internet.
 - Laporan harian/mingguan/bulanan + export CSV (Excel), lengkap dengan TGL LUNAS, TGL SETOR, HPP, dan laba
-- **Import CSV**: upload hasil "Save as CSV" dari sheet *list order QMAS* (lihat bagian 7)
+- **Import CSV**: upload hasil "Save as CSV" dari sheet *list order QMAS* (lihat bagian 7); tersedia pengaturan tahun default untuk tanggal tanpa tahun dan mode batch (timpa/simpan sebagai batch baru)
 - **Rekap Bulanan**: ringkasan per bulan dari 2025 s/d sekarang (omzet, tunai, transfer BSI/Muamalat, piutang belum lunas, laba) + export rekap CSV
 
 ### SM Corner
