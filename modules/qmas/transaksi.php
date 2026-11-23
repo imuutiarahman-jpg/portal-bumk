@@ -71,6 +71,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/modules/qmas/transaksi.php');
     }
 
+    if ($action === 'hapus_bulan') {
+        $bulan = clean($_POST['bulan'] ?? '');
+        $typed = clean($_POST['confirm_bulan'] ?? '');
+
+        if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $bulan)) {
+            flash_set('danger', 'Periode bulan tidak valid.');
+        } elseif ($typed !== $bulan) {
+            flash_set('danger', 'Periode yang diketik tidak sesuai. Hapus dibatalkan.');
+        } else {
+            $jmlTrx  = (int) val('SELECT COUNT(*) FROM qmas_transactions WHERE DATE_FORMAT(transaction_date,"%Y-%m")=?', [$bulan]);
+            $totTrx  = (float) val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE DATE_FORMAT(transaction_date,"%Y-%m")=?', [$bulan]);
+            $jmlBeli = (int) val('SELECT COUNT(*) FROM qmas_purchases WHERE DATE_FORMAT(purchase_date,"%Y-%m")=?', [$bulan]);
+
+            $pdo = db();
+            $pdo->beginTransaction();
+            try {
+                // Item transaksi & pembelian ikut terhapus otomatis (ON DELETE CASCADE).
+                run('DELETE FROM qmas_transactions WHERE DATE_FORMAT(transaction_date,"%Y-%m")=?', [$bulan]);
+                run('DELETE FROM qmas_purchases WHERE DATE_FORMAT(purchase_date,"%Y-%m")=?', [$bulan]);
+                // Sesuai permintaan: seluruh stok produk Qmas dikosongkan.
+                run('UPDATE qmas_products SET stock=0');
+                $pdo->commit();
+
+                activity('qmas', sprintf(
+                    'Hapus data Qmas periode %s: %d transaksi (%s), %d pembelian; stok di-set 0',
+                    $bulan, $jmlTrx, rupiah($totTrx), $jmlBeli
+                ));
+                flash_set('success', 'Data periode ' . $bulan . ' dihapus: ' . $jmlTrx
+                    . ' transaksi dan ' . $jmlBeli . ' pembelian. Stok semua produk di-set 0.');
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                flash_set('danger', 'Gagal menghapus data per bulan: ' . $e->getMessage());
+            }
+        }
+        redirect('/modules/qmas/transaksi.php');
+    }
+
     if ($action === 'simpan') {
         $customer = clean($_POST['customer_name'] ?? '');
         $type = $_POST['customer_type'] ?? 'umum';
@@ -146,6 +183,22 @@ $params = $filterStatus ? [$filterStatus] : [];
 $list = all('SELECT * FROM qmas_transactions ' . $where . ' ORDER BY transaction_date DESC LIMIT 50', $params);
 $products = all('SELECT * FROM qmas_products WHERE is_active=1 ORDER BY name');
 
+// Ringkasan per bulan untuk fitur hapus massal.
+$summaryByMonth = [];
+foreach (all('SELECT DATE_FORMAT(transaction_date,"%Y-%m") periode, COUNT(*) n, COALESCE(SUM(total_amount),0) total
+             FROM qmas_transactions GROUP BY periode') as $s) {
+    $summaryByMonth[$s['periode']] = ['trx' => (int) $s['n'], 'omzet' => rupiah($s['total']), 'beli' => 0, 'pembelian' => 'Rp 0'];
+}
+foreach (all('SELECT DATE_FORMAT(purchase_date,"%Y-%m") periode, COUNT(*) n, COALESCE(SUM(total_amount),0) total
+             FROM qmas_purchases GROUP BY periode') as $s) {
+    if (!isset($summaryByMonth[$s['periode']])) {
+        $summaryByMonth[$s['periode']] = ['trx' => 0, 'omzet' => 'Rp 0', 'beli' => 0, 'pembelian' => 'Rp 0'];
+    }
+    $summaryByMonth[$s['periode']]['beli'] = (int) $s['n'];
+    $summaryByMonth[$s['periode']]['pembelian'] = rupiah($s['total']);
+}
+$totalStock = (int) val('SELECT COALESCE(SUM(stock),0) FROM qmas_products');
+
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
@@ -179,6 +232,28 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 <?php endif; ?>
+
+<div class="card content-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-calendar2-x text-danger"></i> Hapus Data per Bulan</span>
+        <span class="badge bg-light text-dark border">Transaksi · Pembelian · Stok</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label" for="bulanHapus">Periode Bulan</label>
+                <input type="month" id="bulanHapus" class="form-control" value="<?= date('Y-m') ?>">
+            </div>
+            <div class="col-md-6">
+                <div class="alert alert-light mb-0 small" id="ringkasanBulan" aria-live="polite">Memuat ringkasan…</div>
+            </div>
+            <div class="col-md-3">
+                <button type="button" class="btn btn-outline-danger w-100" id="btnHapusBulan"><i class="bi bi-trash3"></i> Hapus Data Bulan Ini</button>
+            </div>
+        </div>
+        <div class="form-text mt-2"><i class="bi bi-info-circle"></i> Menghapus periode akan menghapus seluruh transaksi & pembelian bulan itu dan menyetel stok semua produk Qmas menjadi 0.</div>
+    </div>
+</div>
 
 <div class="row g-3">
     <div class="col-lg-5">
@@ -351,6 +426,46 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
+<!-- Modal hapus data per bulan -->
+<div class="modal fade" id="hapusBulanModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post">
+                <?php csrf_field(); ?>
+                <input type="hidden" name="action" value="hapus_bulan">
+                <input type="hidden" name="bulan" id="confirmBulanValue">
+                <div class="modal-header">
+                    <h5 class="modal-title text-danger"><i class="bi bi-calendar2-x"></i> Hapus Data per Bulan</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger py-2 small">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i> Tindakan ini <b>permanen</b> dan akan menghapus semua transaksi & pembelian pada periode ini, serta menyetel <b>stok semua produk Qmas menjadi 0</b>.
+                    </div>
+                    <table class="table table-sm mb-3">
+                        <tbody>
+                            <tr><th class="w-35">Periode</th><td id="bulanInfo" class="fw-semibold"></td></tr>
+                            <tr><th>Jumlah transaksi</th><td id="bulanTrx"></td></tr>
+                            <tr><th>Total omzet</th><td id="bulanOmzet"></td></tr>
+                            <tr><th>Jumlah pembelian</th><td id="bulanBeli"></td></tr>
+                            <tr><th>Total pembelian</th><td id="bulanPembelian"></td></tr>
+                            <tr><th>Stok saat ini</th><td id="bulanStok"></td></tr>
+                        </tbody>
+                    </table>
+                    <div class="mb-0">
+                        <label class="form-label" for="confirmBulanText">Ketik periode <b id="bulanInfoText" class="text-danger"></b> untuk konfirmasi</label>
+                        <input type="text" id="confirmBulanText" name="confirm_bulan" class="form-control" placeholder="YYYY-MM" autocomplete="off" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-sm btn-danger fw-bold" id="hapusBulanSubmit" disabled><i class="bi bi-trash3"></i> Hapus Permanen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 document.getElementById('addRow').addEventListener('click', function () {
@@ -424,6 +539,47 @@ if (typeof bootstrap !== 'undefined') {
 
     confirmNo.addEventListener('input', function () {
         hapusSubmit.disabled = this.value.trim().toUpperCase() !== hapusNoText.textContent.trim().toUpperCase();
+    });
+}
+
+// Ringkasan & konfirmasi hapus data per bulan
+var summaryBulan = <?= json_encode($summaryByMonth, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+var stokSekarang = '<?= e(rupiah($totalStock)) ?>';
+var bulanHapus = document.getElementById('bulanHapus');
+var ringkasanBulan = document.getElementById('ringkasanBulan');
+function updateRingkasanBulan() {
+    var key = bulanHapus.value || '<?= date('Y-m') ?>';
+    var s = summaryBulan[key] || {trx: 0, omzet: 'Rp 0', beli: 0, pembelian: 'Rp 0'};
+    ringkasanBulan.textContent = 'Periode ' + key + ': ' + s.trx + ' transaksi (' + s.omzet + '), '
+        + s.beli + ' pembelian (' + s.pembelian + '). Stok saat ini ' + stokSekarang + '.';
+}
+bulanHapus.addEventListener('change', updateRingkasanBulan);
+updateRingkasanBulan();
+
+if (typeof bootstrap !== 'undefined') {
+    var bulanModal = new bootstrap.Modal(document.getElementById('hapusBulanModal'));
+    var confirmBulan = document.getElementById('confirmBulanText');
+    var hapusBulanSubmit = document.getElementById('hapusBulanSubmit');
+
+    document.getElementById('btnHapusBulan').addEventListener('click', function () {
+        var key = bulanHapus.value;
+        if (!/^\d{4}-\d{2}$/.test(key)) { alert('Pilih periode bulan terlebih dahulu.'); return; }
+        var s = summaryBulan[key] || {trx: 0, omzet: 'Rp 0', beli: 0, pembelian: 'Rp 0'};
+        document.getElementById('confirmBulanValue').value = key;
+        document.getElementById('bulanInfo').textContent = key;
+        document.getElementById('bulanInfoText').textContent = key;
+        document.getElementById('bulanTrx').textContent = s.trx + ' transaksi';
+        document.getElementById('bulanOmzet').textContent = s.omzet;
+        document.getElementById('bulanBeli').textContent = s.beli + ' nota pembelian';
+        document.getElementById('bulanPembelian').textContent = s.pembelian;
+        document.getElementById('bulanStok').textContent = stokSekarang + ' → Rp 0';
+        confirmBulan.value = '';
+        hapusBulanSubmit.disabled = true;
+        bulanModal.show();
+    });
+
+    confirmBulan.addEventListener('input', function () {
+        hapusBulanSubmit.disabled = this.value.trim() !== document.getElementById('bulanInfoText').textContent.trim();
     });
 }
 });
