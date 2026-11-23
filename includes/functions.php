@@ -194,6 +194,27 @@ function payment_bank(string $status, $postedBank = null): ?string
     return in_array($bank, ['BSI', 'MUAMALAT'], true) ? $bank : null;
 }
 
+/* ---------- Kebijakan password ---------- */
+
+function password_issue(string $password, string $username = ''): ?string
+{
+    if (strlen($password) < 8) return 'Password minimal 8 karakter.';
+    if (!preg_match('/[A-Za-z]/', $password)) return 'Password harus mengandung huruf.';
+    if (!preg_match('/\d/', $password)) return 'Password harus mengandung angka.';
+    if ($username !== '' && strtolower($password) === strtolower($username)) {
+        return 'Password tidak boleh sama dengan username.';
+    }
+    return null;
+}
+
+function random_password(int $length = 12): string
+{
+    $chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    $out = '';
+    for ($i = 0; $i < $length; $i++) $out .= $chars[random_int(0, strlen($chars) - 1)];
+    return $out;
+}
+
 /* ---------- Google Sheets helper (dipakai modul import) ---------- */
 
 function sheet_export_url(string $url): array

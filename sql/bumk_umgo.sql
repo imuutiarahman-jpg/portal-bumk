@@ -52,6 +52,10 @@ CREATE TABLE `users` (
     `full_name` VARCHAR(100) NOT NULL,
     `role` ENUM('super_admin','admin_unit','kasir') NOT NULL,
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
+    `failed_attempts` INT NOT NULL DEFAULT 0,
+    `locked_until` DATETIME NULL,
+    `last_password_changed` DATETIME NULL,
     `last_login` DATETIME NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON DELETE SET NULL
@@ -316,12 +320,12 @@ INSERT INTO `units` (`id`,`code`,`name`,`color`,`icon`,`description`) VALUES
 (3,'daqam','Daqam Caffe','#92400E','bi-cup-hot','Kasir POS makanan & minuman, manajemen menu dan bahan baku.');
 
 -- Semua akun demo memakai password: password123
-INSERT INTO `users` (`id`,`unit_id`,`username`,`password_hash`,`full_name`,`role`) VALUES
-(1,NULL,'superadmin','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Pimpinan BUMK UMGO','super_admin'),
-(2,1,'admin_qmas','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Admin Qmas','admin_unit'),
-(3,1,'kasir_qmas','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Kasir Qmas','kasir'),
-(4,2,'admin_smcorner','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Admin SM Corner','admin_unit'),
-(5,3,'kasir_daqam','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Kasir Daqam','kasir');
+INSERT INTO `users` (`id`,`unit_id`,`username`,`password_hash`,`full_name`,`role`,`must_change_password`) VALUES
+(1,NULL,'superadmin','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Pimpinan BUMK UMGO','super_admin',1),
+(2,1,'admin_qmas','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Admin Qmas','admin_unit',1),
+(3,1,'kasir_qmas','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Kasir Qmas','kasir',1),
+(4,2,'admin_smcorner','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Admin SM Corner','admin_unit',1),
+(5,3,'kasir_daqam','$2y$10$i4GMgUp/cA6YVPUQClet8ueB77Sb2VwzbVPaTPpU4AZMgjZTVlEIi','Kasir Daqam','kasir',1);
 
 -- QMAS
 INSERT INTO `qmas_products` (`id`,`name`,`sku`,`kind`,`size`,`price`,`cost`,`stock`,`min_stock`,`unit`) VALUES

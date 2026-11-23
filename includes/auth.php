@@ -31,6 +31,20 @@ function require_login(): void
         $next = urlencode($_SERVER['REQUEST_URI'] ?? '');
         redirect('/modules/auth/login.php?next=' . $next);
     }
+    if (isset($_SESSION['last_activity']) && time() - (int) $_SESSION['last_activity'] > 1800) {
+        logout_user();
+        redirect('/modules/auth/login.php?timeout=1');
+    }
+    $_SESSION['last_activity'] = time();
+}
+
+/** Paksa ganti password bila akun masih berflag. */
+function require_password_change(): void
+{
+    $user = current_user();
+    if (!$user || empty($user['must_change_password'])) return;
+    if (str_contains((string) ($_SERVER['PHP_SELF'] ?? ''), 'ganti_password.php')) return;
+    redirect('/modules/auth/ganti_password.php');
 }
 
 function require_role(array $roles): void
@@ -61,17 +75,31 @@ function require_unit(string $unitCode): void
     }
 }
 
-function login_user(string $username, string $password): bool
+function login_user(string $username, string $password): array
 {
     $user = row('SELECT * FROM users WHERE username = ? AND is_active = 1', [$username]);
-    if (!$user || !password_verify($password, $user['password_hash'])) {
-        return false;
+
+    if ($user && !empty($user['locked_until']) && strtotime($user['locked_until']) > time()) {
+        return [false, 'Akun terkunci karena terlalu banyak gagal login. Coba lagi setelah ' . tgl($user['locked_until'], true) . '.'];
     }
+
+    if (!$user || !password_verify($password, $user['password_hash'])) {
+        if ($user) {
+            $attempts = (int) $user['failed_attempts'] + 1;
+            $lock = $attempts >= 5 ? date('Y-m-d H:i:s', time() + 15 * 60) : null;
+            run('UPDATE users SET failed_attempts=?, locked_until=? WHERE id=?', [$attempts, $lock, $user['id']]);
+            activity('login_gagal', 'Login gagal untuk ' . $user['username'] . ' (percobaan ke-' . $attempts . ')');
+            if ($lock) return [false, 'Akun dikunci 15 menit karena 5 kali login gagal.'];
+        }
+        return [false, 'Username atau password salah.'];
+    }
+
     session_regenerate_id(true);
     $_SESSION['user_id'] = (int) $user['id'];
-    run('UPDATE users SET last_login = NOW() WHERE id = ?', [$user['id']]);
+    $_SESSION['last_activity'] = time();
+    run('UPDATE users SET last_login=NOW(), failed_attempts=0, locked_until=NULL WHERE id=?', [$user['id']]);
     activity('login', 'Login berhasil: ' . $user['username']);
-    return true;
+    return [true, ''];
 }
 
 function logout_user(): void

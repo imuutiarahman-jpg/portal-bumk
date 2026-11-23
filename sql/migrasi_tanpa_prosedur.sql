@@ -75,6 +75,13 @@ CREATE TABLE IF NOT EXISTS `sm_purchase_items` (
   `subtotal` DECIMAL(12,2) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- --- Keamanan akun ---
+ALTER TABLE `users` ADD COLUMN `must_change_password` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_active`;
+ALTER TABLE `users` ADD COLUMN `failed_attempts` INT NOT NULL DEFAULT 0 AFTER `must_change_password`;
+ALTER TABLE `users` ADD COLUMN `locked_until` DATETIME NULL AFTER `failed_attempts`;
+ALTER TABLE `users` ADD COLUMN `last_password_changed` DATETIME NULL AFTER `locked_until`;
+UPDATE `users` SET `must_change_password`=1 WHERE `username` IN ('superadmin','admin_qmas','kasir_qmas','admin_smcorner','kasir_daqam');
+
 -- --- SM Corner ---
 ALTER TABLE `sm_products` ADD COLUMN `cost` DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER `price`;
 ALTER TABLE `sm_transaction_items` ADD COLUMN `unit_cost` DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER `unit_price`;

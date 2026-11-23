@@ -55,6 +55,15 @@ Portal Utama (landing: header 80px, hero 280px, 3 kartu unit, footer 70px)
 - Token CSRF pada semua form
 - Semua query memakai **prepared statement** (PDO)
 
+### Keamanan akun
+- **Super Admin** mengelola akun lewat menu **Kelola Akun**: tambah, ubah, reset password, nonaktifkan, dan hapus akun. Tidak bisa menghapus akun sendiri atau Super Admin terakhir.
+- Kebijakan password: minimal 8 karakter, wajib huruf + angka, tidak sama dengan username.
+- Akun baru / hasil reset wajib **ganti password** saat login pertama (`must_change_password`).
+- **Lockout**: 5 kali login gagal → akun dikunci 15 menit.
+- **Session timeout** 30 menit tidak aktif.
+- Setiap user bisa mengganti password sendiri lewat menu **Ganti Password**.
+- Riwayat login/logout & aktivitas akun tercatat di `activity_logs` dan ditampilkan di halaman Kelola Akun.
+
 ## 4. Fitur per Unit
 
 ### Qmas Air Mineral

@@ -6,12 +6,18 @@ if (is_logged_in()) {
 }
 
 $error = '';
+if (!empty($_GET['timeout'])) $error = 'Sesi Anda habis setelah 30 menit tidak aktif. Silakan login kembali.';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $username = clean($_POST['username'] ?? '');
     $password = (string) ($_POST['password'] ?? '');
+    [$ok, $msg] = login_user($username, $password);
 
-    if (login_user($username, $password)) {
+    if ($ok) {
+        if (!empty(current_user()['must_change_password'])) {
+            flash_set('warning', 'Silakan ganti password terlebih dahulu.');
+            redirect('/modules/auth/ganti_password.php');
+        }
         $next = (string) ($_POST['next'] ?? '');
         if ($next !== '' && str_starts_with($next, BASE_URL)) {
             $next = substr($next, strlen(BASE_URL));
@@ -22,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('success', 'Selamat datang, ' . current_user()['full_name'] . '!');
         redirect($next);
     }
-    $error = 'Username atau password salah.';
+    $error = $msg;
 }
 
 $next = (string) ($_GET['next'] ?? '');

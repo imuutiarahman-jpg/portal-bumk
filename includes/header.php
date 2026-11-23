@@ -3,6 +3,7 @@
 $isPublic   = $isPublic ?? false;
 $activeUnit = $activeUnit ?? null;
 $user       = current_user();
+if ($user) require_password_change();
 $currentFile = basename($_SERVER['PHP_SELF']);
 
 $unitMenus = [
@@ -107,6 +108,10 @@ $unitMenus = [
             <?php endif; ?>
 
             <div class="sidebar-label mt-4">AKUN</div>
+            <?php if ($user['role'] === 'super_admin'): ?>
+                <a href="<?= base_url('/modules/superadmin/users.php') ?>" class="sidebar-link <?= $currentFile === 'users.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Kelola Akun</a>
+            <?php endif; ?>
+            <a href="<?= base_url('/modules/auth/ganti_password.php') ?>" class="sidebar-link <?= $currentFile === 'ganti_password.php' ? 'active' : '' ?>"><i class="bi bi-key"></i> Ganti Password</a>
             <a href="<?= base_url('/modules/auth/logout.php') ?>" class="sidebar-link text-danger"><i class="bi bi-box-arrow-left"></i> Keluar</a>
         </aside>
         <main class="col-md-10 col-lg-10 p-4 app-main">
