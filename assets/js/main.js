@@ -3,20 +3,56 @@ document.addEventListener('DOMContentLoaded', function () {
     var toggle = document.getElementById('menuToggle');
     var overlay = document.getElementById('sidebarOverlay');
     var closeBtn = document.getElementById('menuClose');
-    function setSidebar(open) {
+    function setSidebar(open, restoreFocus) {
+        var wasOpen = document.body.classList.contains('sidebar-open');
         document.body.classList.toggle('sidebar-open', open);
         if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open && !wasOpen) {
+            var first = document.querySelector('#appSidebar .sidebar-link');
+            if (first) first.focus();
+        } else if (!open && wasOpen && restoreFocus && toggle) {
+            toggle.focus();
+        }
     }
     if (toggle) toggle.addEventListener('click', function () {
         setSidebar(!document.body.classList.contains('sidebar-open'));
     });
-    if (overlay) overlay.addEventListener('click', function () { setSidebar(false); });
-    if (closeBtn) closeBtn.addEventListener('click', function () { setSidebar(false); });
+    if (overlay) overlay.addEventListener('click', function () { setSidebar(false, true); });
+    if (closeBtn) closeBtn.addEventListener('click', function () { setSidebar(false, true); });
     document.querySelectorAll('#appSidebar .sidebar-link').forEach(function (link) {
         link.addEventListener('click', function () { setSidebar(false); });
     });
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') setSidebar(false);
+        if (e.key === 'Escape') setSidebar(false, true);
+    });
+
+    // Tampilkan / sembunyikan password
+    document.querySelectorAll('[data-toggle-password]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var input = document.querySelector(btn.dataset.togglePassword);
+            if (!input) return;
+            var show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            btn.innerHTML = '<i class="bi bi-' + (show ? 'eye-slash' : 'eye') + '"></i>';
+            btn.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password');
+        });
+    });
+
+    // Indikator kekuatan password
+    document.querySelectorAll('[data-strength-for]').forEach(function (meter) {
+        var input = document.getElementById(meter.dataset.strengthFor);
+        if (!input) return;
+        function score(value) {
+            if (!value) return 0;
+            var s = 0;
+            if (value.length >= 8) s++;
+            if (/[A-Za-z]/.test(value) && /\d/.test(value)) s++;
+            if (value.length >= 12 || /[^A-Za-z0-9]/.test(value)) s++;
+            return Math.min(3, s);
+        }
+        function update() { meter.dataset.level = score(input.value); }
+        input.addEventListener('input', update);
+        update();
     });
 
     // Konfirmasi untuk aksi hapus

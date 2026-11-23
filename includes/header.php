@@ -5,6 +5,8 @@ $activeUnit = $activeUnit ?? null;
 $user       = current_user();
 if ($user) require_password_change();
 $currentFile = basename($_SERVER['PHP_SELF']);
+$pageUnit    = $activeUnit ?: (string) ($user['unit_code'] ?? '');
+$initials    = $user ? strtoupper(mb_substr($user['full_name'] ?? $user['username'], 0, 2)) : '';
 
 $unitMenus = [
     'qmas' => [
@@ -41,38 +43,41 @@ $unitMenus = [
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($title ?? APP_NAME) ?> · <?= APP_NAME ?></title>
+    <meta name="description" content="Portal Sistem Informasi Unit Usaha Badan Usaha Milik Kampus Universitas Muhammadiyah Gorontalo.">
+    <meta name="theme-color" content="#0B4F3E">
     <link href="<?= base_url('/assets/vendor/bootstrap/bootstrap.min.css') ?>?v=1" rel="stylesheet" onerror="this.href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css'">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link href="<?= base_url('/assets/css/style.css') ?>?v=2" rel="stylesheet">
+    <link href="<?= base_url('/assets/vendor/bootstrap-icons/bootstrap-icons.min.css') ?>?v=1" rel="stylesheet">
+    <link href="<?= base_url('/assets/css/style.css') ?>?v=4" rel="stylesheet">
     <script src="<?= base_url('/assets/vendor/bootstrap/bootstrap.bundle.min.js') ?>?v=2"></script>
     <script>window.bootstrap || document.write('<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"><\/script>');</script>
     <script src="<?= base_url('/assets/vendor/chartjs/chart.umd.min.js') ?>?v=1"></script>
 </head>
-<body class="<?= $isPublic ? 'public-page' : 'app-page' ?>">
+<body class="<?= $isPublic ? 'public-page' : 'app-page' ?>" data-unit="<?= e($pageUnit) ?>">
+<a class="skip-link" href="#mainContent">Lewati ke konten utama</a>
 
 <header class="portal-header">
     <div class="container-fluid px-4 h-100 d-flex align-items-center justify-content-between">
         <?php if (!$isPublic && $user): ?>
-            <button class="btn mobile-menu-btn" type="button" id="menuToggle" aria-label="Buka menu" aria-expanded="false" aria-controls="appSidebar"><i class="bi bi-list"></i></button>
+            <button class="btn mobile-menu-btn" type="button" id="menuToggle" aria-label="Buka menu navigasi" aria-expanded="false" aria-controls="appSidebar"><i class="bi bi-list"></i></button>
         <?php endif; ?>
-        <a href="<?= base_url('/modules/portal/index.php') ?>" class="d-flex align-items-center gap-2 text-decoration-none text-dark">
+        <a href="<?= base_url('/modules/portal/index.php') ?>" class="d-flex align-items-center gap-2 text-decoration-none text-dark" aria-label="Portal BUMK UMGO – beranda">
             <span class="logo-badge">UMGO</span>
             <span class="logo-badge bumk">BUMK</span>
-            <span class="fw-bold ms-1 d-none d-lg-inline portal-title">Portal Sistem Informasi Unit Usaha BUMK UMGO</span>
+            <span class="portal-title ms-1 d-none d-lg-block">Portal Sistem Informasi Unit Usaha BUMK UMGO<small>Terintegrasi · Qmas · SM Corner · Daqam</small></span>
         </a>
-        <nav class="d-flex align-items-center gap-2">
-            <a class="btn btn-sm btn-outline-success" href="<?= base_url('/modules/portal/index.php') ?>"><i class="bi bi-house-door"></i> Beranda</a>
+        <nav class="header-nav d-flex align-items-center" aria-label="Navigasi utama">
+            <a class="btn btn-sm btn-outline-secondary" href="<?= base_url('/modules/portal/index.php') ?>" <?= str_contains($_SERVER['PHP_SELF'], '/portal/') ? 'aria-current="page"' : '' ?>><i class="bi bi-house-door"></i> <span class="d-none d-sm-inline">Beranda</span></a>
             <?php if ($user): ?>
                 <?php if ($user['role'] === 'super_admin'): ?>
-                    <a class="btn btn-sm btn-outline-secondary d-none d-md-inline-block" href="<?= base_url('/modules/superadmin/dashboard.php') ?>"><i class="bi bi-bar-chart-line"></i> Omzet Gabungan</a>
+                    <a class="btn btn-sm btn-outline-secondary d-none d-md-inline-block" href="<?= base_url('/modules/superadmin/dashboard.php') ?>" <?= str_contains($_SERVER['PHP_SELF'], 'superadmin/dashboard') ? 'aria-current="page"' : '' ?>><i class="bi bi-bar-chart-line"></i> Omzet Gabungan</a>
                 <?php else: ?>
                     <a class="btn btn-sm btn-outline-secondary d-none d-md-inline-block" href="<?= base_url(dashboard_path()) ?>"><i class="bi bi-speedometer2"></i> Dashboard Saya</a>
                 <?php endif; ?>
-                <span class="badge bg-light text-dark border d-none d-sm-inline-block"><?= e(role_label($user['role'])) ?></span>
-                <span class="user-pill d-none d-lg-inline-block"><i class="bi bi-person-circle"></i> <?= e($user['full_name']) ?></span>
-                <a class="btn btn-sm btn-outline-danger" href="<?= base_url('/modules/auth/logout.php') ?>"><i class="bi bi-box-arrow-right"></i> Keluar</a>
+                <span class="badge bg-light text-dark border d-none d-md-inline-block"><?= e(role_label($user['role'])) ?></span>
+                <span class="user-pill d-none d-lg-inline-flex" title="<?= e($user['full_name']) ?>"><span class="user-avatar"><?= e($initials) ?></span><span class="text-truncate" style="max-width:130px"><?= e($user['full_name']) ?></span></span>
+                <a class="btn btn-sm btn-outline-danger" href="<?= base_url('/modules/auth/logout.php') ?>" aria-label="Keluar"><i class="bi bi-box-arrow-right"></i> <span class="d-none d-sm-inline">Keluar</span></a>
             <?php else: ?>
-                <a class="btn btn-sm btn-success" href="<?= base_url('/modules/auth/login.php') ?>"><i class="bi bi-shield-lock"></i> Login Pimpinan</a>
+                <a class="btn btn-sm btn-success" href="<?= base_url('/modules/auth/login.php') ?>"><i class="bi bi-shield-lock"></i> Login</a>
             <?php endif; ?>
         </nav>
     </div>
@@ -82,16 +87,16 @@ $unitMenus = [
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 <div class="container-fluid app-layout">
     <div class="row">
-        <aside class="col-md-2 col-lg-2 app-sidebar p-3" id="appSidebar">
+        <aside class="col-md-2 col-lg-2 app-sidebar p-3" id="appSidebar" aria-label="Menu samping">
             <div class="d-flex justify-content-between align-items-center">
                 <div class="sidebar-label mb-0">MENU UTAMA</div>
-                <button class="btn btn-sm sidebar-close d-lg-none" type="button" id="menuClose" aria-label="Tutup menu"><i class="bi bi-x-lg"></i></button>
+                <button class="btn btn-sm sidebar-close d-lg-none" type="button" id="menuClose" aria-label="Tutup menu navigasi"><i class="bi bi-x-lg"></i></button>
             </div>
             <a href="<?= base_url('/modules/portal/index.php') ?>" class="sidebar-link <?= $currentFile === 'index.php' && !$activeUnit ? 'active' : '' ?>"><i class="bi bi-grid-1x2"></i> Portal Utama</a>
 
             <?php if ($user['role'] === 'super_admin'): ?>
                 <div class="sidebar-label mt-3">PIMPINAN</div>
-                <a href="<?= base_url('/modules/superadmin/dashboard.php') ?>" class="sidebar-link <?= str_contains($_SERVER['PHP_SELF'], 'superadmin') ? 'active' : '' ?>"><i class="bi bi-bar-chart-line"></i> Omzet Gabungan</a>
+                <a href="<?= base_url('/modules/superadmin/dashboard.php') ?>" class="sidebar-link <?= str_contains($_SERVER['PHP_SELF'], 'superadmin/dashboard') ? 'active' : '' ?>"><i class="bi bi-bar-chart-line"></i> Omzet Gabungan</a>
                 <div class="sidebar-label mt-3">UNIT USAHA</div>
                 <?php foreach (['qmas', 'smcorner', 'daqam'] as $code): $u = unit_by_code($code); ?>
                     <div class="sidebar-unit"><?= e($u['name'] ?? $code) ?></div>
@@ -114,9 +119,9 @@ $unitMenus = [
             <a href="<?= base_url('/modules/auth/ganti_password.php') ?>" class="sidebar-link <?= $currentFile === 'ganti_password.php' ? 'active' : '' ?>"><i class="bi bi-key"></i> Ganti Password</a>
             <a href="<?= base_url('/modules/auth/logout.php') ?>" class="sidebar-link text-danger"><i class="bi bi-box-arrow-left"></i> Keluar</a>
         </aside>
-        <main class="col-md-10 col-lg-10 p-4 app-main">
+        <main class="col-md-10 col-lg-10 p-4 app-main" id="mainContent" tabindex="-1">
             <?= flash_render() ?>
 <?php else: ?>
-        <main class="portal-main">
+        <main class="portal-main" id="mainContent" tabindex="-1">
             <?= flash_render() ?>
 <?php endif; ?>

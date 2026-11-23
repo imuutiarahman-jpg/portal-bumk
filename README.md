@@ -128,10 +128,13 @@ portal-bumk/
 
 ## 6. Catatan Desain
 
-Implementasi mengikuti dokumen `PSD_Perancangan_Portal_BUMK_UMGO.docx`:
-- Warna unit: Qmas `#0284C7`, SM Corner `#059669`, Daqam `#92400E`
-- Gradient hero: `#0B4F3E → #10B981`, footer `#1F2937`
+Implementasi mengikuti dokumen `PSD_Perancangan_Portal_BUMK_UMGO.docx` dengan penyempurnaan palet (UI v3):
+- Warna identitas UMGO: hijau tua `#0B4F3E` → hijau terang `#10B981`, dengan turunan shade untuk aksen/soft background
+- Warna unit: Qmas `#0284C7`, SM Corner `#059669`, Daqam `#92400E` (dipakai lewat atribut `data-unit` pada `<body>`)
+- Header 76px, hero ±296px, footer 68px; kartu KPI/unit_radius 16px
 - Struktur layer PSD diterjemahkan ke section CSS: `01_HEADER_NAV`, `02_HERO_BANNER`, `03_MENU_UNIT_USAHA`, `04_FOOTER_INFO`
+- Bootstrap, Bootstrap Icons, dan Chart.js disimpan lokal di `assets/vendor/` (tetap berfungsi tanpa internet)
+- Aksesibilitas: skip link, `:focus-visible`, label form, aria pada drawer sidebar, serta dukungan `prefers-reduced-motion`
 
 Bagian "Alur Sistem & Struktur Database" yang disebut di dokumen tetapi tidak diisi, sudah dilengkapi di file `sql/bumk_umgo.sql` dan dokumentasi ini.
 

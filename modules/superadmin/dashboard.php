@@ -25,6 +25,7 @@ foreach ($omzet as $o) {
     $grandTotal += (float) $o['total'];
     $grandTrx += (int) $o['trx'];
 }
+$avgTrx = $grandTrx > 0 ? $grandTotal / $grandTrx : 0;
 
 $recent = all("SELECT * FROM (
     SELECT 'Qmas Air Mineral' AS unit, transaction_no AS no, transaction_date AS waktu, customer_name AS nama, total_amount AS total,
@@ -56,19 +57,20 @@ foreach ($omzet as $o) { $u = unit_by_code($o['code']); $unitLabels[] = $u['name
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
     <div>
-        <h1 class="section-title mb-1"><i class="bi bi-bar-chart-line text-success"></i> Ringkasan Omzet Gabungan</h1>
-        <div class="text-muted small">Pimpinan BUMK UMGO · <i class="bi bi-calendar3"></i> <?= date('d F Y') ?></div>
+        <div class="section-eyebrow">Pimpinan BUMK UMGO</div>
+        <h1 class="section-title"><i class="bi bi-bar-chart-line text-success"></i> Ringkasan Omzet Gabungan</h1>
+        <div class="page-sub"><i class="bi bi-calendar3"></i> <?= date('d F Y') ?> · Data seluruh unit usaha</div>
     </div>
     <a href="<?= base_url('/modules/portal/index.php') ?>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Portal</a>
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET HARI INI</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value text-success"><?= rupiah($grandToday) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET BULAN INI</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-calendar-check"></i></span></div><div class="kpi-value text-primary"><?= rupiah($grandMonth) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">TOTAL TRANSAKSI</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-receipt"></i></span></div><div class="kpi-value"><?= angka($grandTrx) ?> <small class="fs-6 text-muted">trx</small></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PIUTANG QMAS</span><span class="kpi-icon bg-danger-subtle text-danger"><i class="bi bi-exclamation-triangle"></i></span></div><div class="kpi-value text-danger"><?= angka($piutang) ?> <small class="fs-6 text-muted">nota</small></div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET HARI INI</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value text-success"><?= rupiah($grandToday) ?></div><div class="kpi-foot">Bulan ini <?= rupiah($grandMonth) ?></div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET BULAN INI</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-calendar-check"></i></span></div><div class="kpi-value text-primary"><?= rupiah($grandMonth) ?></div><div class="kpi-foot">Total keseluruhan <?= rupiah($grandTotal) ?></div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">TOTAL TRANSAKSI</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-receipt"></i></span></div><div class="kpi-value"><?= angka($grandTrx) ?> <small class="fs-6 text-muted">trx</small></div><div class="kpi-foot">Rata-rata <?= rupiah($avgTrx) ?> / transaksi</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PIUTANG QMAS</span><span class="kpi-icon bg-danger-subtle text-danger"><i class="bi bi-exclamation-triangle"></i></span></div><div class="kpi-value text-danger"><?= angka($piutang) ?> <small class="fs-6 text-muted">nota</small></div><?php if ($piutang > 0): ?><div class="kpi-trend danger"><i class="bi bi-arrow-up-right"></i> Perlu ditindaklanjuti</div><?php else: ?><div class="kpi-trend"><i class="bi bi-check-circle"></i> Tidak ada piutang</div><?php endif; ?></div></div>
 </div>
 
 <div class="row g-3 mb-4">

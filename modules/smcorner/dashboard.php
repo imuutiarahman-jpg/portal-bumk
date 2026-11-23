@@ -29,16 +29,20 @@ foreach ($pay as $p) { $payLabels[] = ucfirst($p['metode']); $payData[] = (float
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div><h1 class="section-title mb-1"><i class="bi bi-bag-check-fill" style="color:var(--smcorner)"></i> Dashboard Suara Muhammadiyah Corner</h1><div class="text-muted small">Ritel atribut persyarikatan & perlengkapan HW · <?= date('d F Y') ?></div></div>
+<div class="page-head">
+    <div>
+        <div class="section-eyebrow">Unit Usaha · SM Corner</div>
+        <h1 class="section-title"><i class="bi bi-bag-check-fill" style="color:var(--smcorner)"></i> Dashboard Suara Muhammadiyah Corner</h1>
+        <div class="page-sub">Ritel atribut persyarikatan & perlengkapan HW · <?= date('d F Y') ?></div>
+    </div>
     <a href="<?= base_url('/modules/smcorner/kasir.php') ?>" class="btn btn-sm text-white fw-bold" style="background:var(--smcorner)"><i class="bi bi-cart-plus"></i> Buka Kasir</a>
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PENJUALAN HARI INI</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value" style="color:var(--smcorner)"><?= rupiah($salesToday) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PRODUK TERLARIS</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-star-fill"></i></span></div><div class="kpi-value fs-6 mt-3"><?= e($bestSeller['name'] ?? '-') ?></div><div class="kpi-label"><?= angka($bestSeller['qty'] ?? 0) ?> terjual</div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">STOK MENIPIS</span><span class="kpi-icon bg-danger-subtle text-danger"><i class="bi bi-exclamation-triangle"></i></span></div><div class="kpi-value text-danger"><?= angka($lowCount) ?> <small class="fs-6 text-muted">produk</small></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">NILAI INVENTARIS</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-boxes"></i></span></div><div class="kpi-value text-primary"><?= rupiah($inventory) ?></div><div class="kpi-label">Bulan ini <?= rupiah($salesMonth) ?> · Beli <?= rupiah($purchaseMonth) ?><?= $sheetValue ? ' · Sheet: '.rupiah($sheetValue) : '' ?></div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PENJUALAN HARI INI</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value" style="color:var(--smcorner)"><?= rupiah($salesToday) ?></div><div class="kpi-foot">Bulan ini <?= rupiah($salesMonth) ?></div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PRODUK TERLARIS</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-star-fill"></i></span></div><div class="kpi-value fs-6 mt-3"><?= e($bestSeller['name'] ?? '-') ?></div><div class="kpi-foot"><?= angka($bestSeller['qty'] ?? 0) ?> unit terjual</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">STOK MENIPIS</span><span class="kpi-icon bg-danger-subtle text-danger"><i class="bi bi-exclamation-triangle"></i></span></div><div class="kpi-value text-danger"><?= angka($lowCount) ?> <small class="fs-6 text-muted">produk</small></div><?php if ($lowCount): ?><div class="kpi-trend danger"><i class="bi bi-exclamation-triangle"></i> Perlu restock</div><?php else: ?><div class="kpi-trend"><i class="bi bi-check-circle"></i> Semua stok aman</div><?php endif; ?></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">NILAI INVENTARIS</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-boxes"></i></span></div><div class="kpi-value text-primary"><?= rupiah($inventory) ?></div><div class="kpi-foot">Beli bulan ini <?= rupiah($purchaseMonth) ?><?= $sheetValue ? ' · Sheet: '.rupiah($sheetValue) : '' ?></div></div></div>
 </div>
 
 <div class="row g-3 mb-4">

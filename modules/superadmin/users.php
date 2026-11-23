@@ -113,39 +113,68 @@ $users = all('SELECT u.*, un.name unit_name FROM users u LEFT JOIN units un ON u
 $units = all('SELECT * FROM units ORDER BY id');
 $logs = all('SELECT l.*, u.username FROM activity_logs l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.created_at DESC LIMIT 40');
 $superCount = (int) val('SELECT COUNT(*) FROM users WHERE role="super_admin" AND is_active=1');
+$userCount  = count($users);
+$activeCount = count(array_filter($users, fn ($u) => (int) $u['is_active'] === 1));
+$lockedCount = count(array_filter($users, fn ($u) => !empty($u['locked_until']) && strtotime($u['locked_until']) > time()));
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <div class="page-head">
-    <div><h1 class="section-title"><i class="bi bi-people-fill text-success"></i> Kelola Akun Pengguna</h1><div class="page-sub">Super Admin membuat & mengelola akun untuk masing-masing unit usaha · Super Admin aktif: <?= $superCount ?></div></div>
+    <div>
+        <div class="section-eyebrow">Administrasi</div>
+        <h1 class="section-title"><i class="bi bi-people-fill text-success"></i> Kelola Akun Pengguna</h1>
+        <div class="page-sub">Buat dan kelola akun Admin/Kasir untuk masing-masing unit usaha.</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">TOTAL AKUN</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-people"></i></span></div><div class="kpi-value"><?= $userCount ?></div><div class="kpi-foot">Seluruh akun terdaftar</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">AKUN AKTIF</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-check2-circle"></i></span></div><div class="kpi-value text-success"><?= $activeCount ?></div><div class="kpi-foot">Dapat digunakan</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">SUPER ADMIN</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-shield-check"></i></span></div><div class="kpi-value"><?= $superCount ?></div><div class="kpi-foot">Akses seluruh unit</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">AKUN TERKUNCI</span><span class="kpi-icon bg-danger-subtle text-danger"><i class="bi bi-lock"></i></span></div><div class="kpi-value text-danger"><?= $lockedCount ?></div><div class="kpi-foot">Login gagal berulang</div></div></div>
 </div>
 
 <div class="row g-3">
-    <div class="col-lg-8">
+    <div class="col-xl-8">
         <div class="card content-card">
-            <div class="card-header">Daftar Akun</div>
+            <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                <span><i class="bi bi-list-ul me-1"></i> Daftar Akun</span>
+                <span class="badge bg-light text-dark border"><?= $userCount ?> akun</span>
+            </div>
             <div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle">
-                <thead class="table-light"><tr><th>Username</th><th>Nama</th><th>Role</th><th>Unit</th><th>Status</th><th>Keamanan</th><th>Aksi</th></tr></thead>
+                <thead class="table-light"><tr><th>Pengguna</th><th>Role</th><th>Unit</th><th>Status</th><th>Keamanan</th><th>Aksi</th></tr></thead>
                 <tbody>
                 <?php foreach ($users as $u): ?>
                     <tr>
-                        <td class="small fw-semibold"><?= e($u['username']) ?></td>
-                        <td class="small"><?= e($u['full_name']) ?></td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="user-avatar sm"><?= e(strtoupper(mb_substr($u['full_name'] ?? $u['username'], 0, 2))) ?></span>
+                                <div>
+                                    <div class="small fw-semibold"><?= e($u['full_name']) ?></div>
+                                    <div class="text-muted" style="font-size:11.5px">@<?= e($u['username']) ?></div>
+                                </div>
+                            </div>
+                        </td>
                         <td class="small"><?= e(role_label($u['role'])) ?></td>
                         <td class="small"><?= e($u['unit_name'] ?? '-') ?></td>
-                        <td><span class="badge bg-<?= $u['is_active'] ? 'success' : 'secondary' ?>"><?= $u['is_active'] ? 'Aktif' : 'Nonaktif' ?></span><?php if (!empty($u['locked_until']) && strtotime($u['locked_until']) > time()): ?><br><span class="badge bg-danger mt-1">Terkunci</span><?php endif; ?></td>
+                        <td>
+                            <span class="badge bg-<?= $u['is_active'] ? 'success' : 'secondary' ?> status-badge"><?= $u['is_active'] ? 'Aktif' : 'Nonaktif' ?></span>
+                            <?php if (!empty($u['locked_until']) && strtotime($u['locked_until']) > time()): ?><br><span class="badge bg-danger mt-1">Terkunci</span><?php endif; ?>
+                        </td>
                         <td class="small">
                             <?php if ($u['must_change_password']): ?><span class="badge bg-warning text-dark">Wajib ganti</span><?php else: ?><span class="badge bg-light text-dark">OK</span><?php endif; ?>
                             <?php if ($u['failed_attempts'] > 0): ?><br><span class="text-danger">Gagal: <?= (int) $u['failed_attempts'] ?></span><?php endif; ?>
                         </td>
-                        <td class="text-nowrap">
-                            <button class="btn btn-sm btn-outline-warning btn-edit" data-id="<?= $u['id'] ?>" data-name="<?= e($u['full_name']) ?>" data-role="<?= e($u['role']) ?>" data-unit="<?= (int) $u['unit_id'] ?>">Ubah</button>
-                            <button class="btn btn-sm btn-outline-primary btn-reset" data-id="<?= $u['id'] ?>" data-name="<?= e($u['username']) ?>">Reset</button>
-                            <?php if ((int) $u['id'] !== (int) current_user()['id']): ?>
-                            <form method="post" class="d-inline" onsubmit="return confirm('Ubah status akun ini?')"><?php csrf_field(); ?><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= $u['id'] ?>"><button class="btn btn-sm btn-outline-secondary"><?= $u['is_active'] ? 'Nonaktif' : 'Aktifkan' ?></button></form>
-                            <form method="post" class="d-inline" onsubmit="return confirm('Hapus akun ini permanen?')"><?php csrf_field(); ?><input type="hidden" name="action" value="hapus"><input type="hidden" name="id" value="<?= $u['id'] ?>"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
-                            <?php endif; ?>
+                        <td>
+                            <div class="action-group">
+                                <button class="btn btn-sm btn-outline-warning btn-edit" data-id="<?= $u['id'] ?>" data-name="<?= e($u['full_name']) ?>" data-role="<?= e($u['role']) ?>" data-unit="<?= (int) $u['unit_id'] ?>">Ubah</button>
+                                <button class="btn btn-sm btn-outline-primary btn-reset" data-id="<?= $u['id'] ?>" data-name="<?= e($u['username']) ?>">Reset</button>
+                                <?php if ((int) $u['id'] !== (int) current_user()['id']): ?>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Ubah status akun ini?')"><?php csrf_field(); ?><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= $u['id'] ?>"><button class="btn btn-sm btn-outline-secondary"><?= $u['is_active'] ? 'Nonaktif' : 'Aktifkan' ?></button></form>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Hapus akun ini permanen?')"><?php csrf_field(); ?><input type="hidden" name="action" value="hapus"><input type="hidden" name="id" value="<?= $u['id'] ?>"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Hapus</button></form>
+                                <?php endif; ?>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -153,21 +182,21 @@ require_once __DIR__ . '/../../includes/header.php';
             </table></div>
         </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-xl-4">
         <div class="card content-card mb-3">
-            <div class="card-header">Tambah Akun Baru</div>
+            <div class="card-header"><i class="bi bi-person-plus me-1"></i> Tambah Akun Baru</div>
             <div class="card-body">
                 <form method="post">
                     <?php csrf_field(); ?><input type="hidden" name="action" value="tambah">
-                    <div class="mb-2"><label class="form-label small fw-semibold">Username</label><input name="username" class="form-control form-control-sm" required></div>
-                    <div class="mb-2"><label class="form-label small fw-semibold">Nama Lengkap</label><input name="full_name" class="form-control form-control-sm" required></div>
-                    <div class="row g-2 mb-2"><div class="col-6"><label class="form-label small fw-semibold">Role</label><select name="role" class="form-select form-select-sm"><option value="kasir">Kasir</option><option value="admin_unit">Admin Unit</option><option value="super_admin">Super Admin</option></select></div><div class="col-6"><label class="form-label small fw-semibold">Unit</label><select name="unit_id" class="form-select form-select-sm"><option value="">-- Pilih --</option><?php foreach ($units as $un): ?><option value="<?= $un['id'] ?>"><?= e($un['name']) ?></option><?php endforeach; ?></select></div></div>
-                    <div class="mb-3"><label class="form-label small fw-semibold">Password (kosongkan = generate otomatis)</label><input type="text" name="password" class="form-control form-control-sm" placeholder="Min. 8 char, huruf + angka"></div>
-                    <button class="btn btn-sm w-100 text-white fw-bold" style="background:var(--umgo-dark)">Buat Akun</button>
+                    <div class="mb-2"><label class="form-label" for="newUsername">Username</label><input id="newUsername" name="username" class="form-control form-control-sm" required></div>
+                    <div class="mb-2"><label class="form-label" for="newName">Nama Lengkap</label><input id="newName" name="full_name" class="form-control form-control-sm" required></div>
+                    <div class="row g-2 mb-2"><div class="col-6"><label class="form-label" for="newRole">Role</label><select id="newRole" name="role" class="form-select form-select-sm"><option value="kasir">Kasir</option><option value="admin_unit">Admin Unit</option><option value="super_admin">Super Admin</option></select></div><div class="col-6"><label class="form-label" for="newUnit">Unit</label><select id="newUnit" name="unit_id" class="form-select form-select-sm"><option value="">-- Pilih --</option><?php foreach ($units as $un): ?><option value="<?= $un['id'] ?>"><?= e($un['name']) ?></option><?php endforeach; ?></select></div></div>
+                    <div class="mb-3"><label class="form-label" for="newPassword">Password (kosongkan = generate otomatis)</label><input type="text" id="newPassword" name="password" class="form-control form-control-sm" placeholder="Min. 8 char, huruf + angka"></div>
+                    <button class="btn btn-sm w-100 text-white fw-bold" style="background:var(--umgo-800)"><i class="bi bi-plus-lg"></i> Buat Akun</button>
                 </form>
             </div>
         </div>
-        <div class="card content-card"><div class="card-header">Riwayat Aktivitas Login</div><div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Waktu</th><th>User</th><th>Aktivitas</th></tr></thead><tbody>
+        <div class="card content-card"><div class="card-header"><i class="bi bi-clock-history me-1"></i> Riwayat Aktivitas Login</div><div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Waktu</th><th>User</th><th>Aktivitas</th></tr></thead><tbody>
             <?php if (!$logs): ?><tr><td colspan="3" class="empty-state">Belum ada aktivitas.</td></tr><?php endif; ?>
             <?php foreach ($logs as $l): ?><tr><td class="small"><?= tgl($l['created_at'], true) ?></td><td class="small"><?= e($l['username'] ?? '-') ?></td><td class="small"><?= e($l['action']) ?></td></tr><?php endforeach; ?>
         </tbody></table></div></div>
@@ -190,7 +219,7 @@ require_once __DIR__ . '/../../includes/header.php';
 <div class="modal fade" id="resetModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
     <form method="post"><?php csrf_field(); ?><input type="hidden" name="action" value="reset"><input type="hidden" name="id" id="resetId">
         <div class="modal-header"><h5 class="modal-title">Reset Password</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-        <div class="modal-body"><div class="alert alert-light py-2 small">User <b id="resetName"></b> akan diminta ganti password saat login berikutnya.</div><div class="mb-2"><label class="form-label small fw-semibold">Password Baru (kosongkan = generate)</label><input type="text" name="new_password" class="form-control form-control-sm"></div></div>
+        <div class="modal-body"><div class="alert alert-light py-2 small"><i class="bi bi-info-circle me-1"></i> User <b id="resetName"></b> akan diminta ganti password saat login berikutnya.</div><div class="mb-2"><label class="form-label" for="resetPassword">Password Baru (kosongkan = generate)</label><input type="text" id="resetPassword" name="new_password" class="form-control form-control-sm"><div class="strength" data-strength-for="resetPassword" aria-hidden="true"><span></span><span></span><span></span></div></div></div>
         <div class="modal-footer"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button><button class="btn btn-sm btn-primary">Reset</button></div>
     </form>
 </div></div></div>

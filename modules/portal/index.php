@@ -37,21 +37,33 @@ $linkFor = function (string $code) use ($user): string {
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
-<section class="hero-banner" id="hero">
-    <div class="container-fluid px-4 position-relative" style="z-index:1">
-        <div class="small text-uppercase fw-bold" style="letter-spacing:2px;opacity:.8">Badan Usaha Milik Kampus · UMGO</div>
-        <h1 class="mt-3">"Sinergi Kemandirian Ekonomi Kampus Universitas Muhammadiyah Gorontalo"</h1>
-        <p class="mb-0">Pilih Unit Usaha di Bawah Ini untuk Masuk ke Dashboard Operasional</p>
-        <?php if ($user): ?>
-            <a href="<?= base_url(dashboard_path()) ?>" class="btn btn-light btn-sm mt-3 fw-semibold"><i class="bi bi-speedometer2"></i> Buka Dashboard Saya</a>
-        <?php endif; ?>
+<section class="hero-banner" id="hero" aria-labelledby="heroTitle">
+    <div class="hero-ornament" aria-hidden="true"><i class="bi bi-diagram-3"></i></div>
+    <div class="container-fluid px-4 hero-inner">
+        <div class="hero-kicker"><i class="bi bi-mortarboard-fill"></i> Badan Usaha Milik Kampus · UMGO</div>
+        <h1 id="heroTitle">"Sinergi Kemandirian Ekonomi Kampus Universitas Muhammadiyah Gorontalo"</h1>
+        <p>Pilih unit usaha di bawah ini untuk masuk ke dashboard operasional. Satu pintu masuk untuk seluruh lini bisnis BUMK UMGO.</p>
+        <div class="hero-actions">
+            <?php if ($user): ?>
+                <a href="<?= base_url(dashboard_path()) ?>" class="btn btn-light"><i class="bi bi-speedometer2"></i> Buka Dashboard Saya</a>
+            <?php else: ?>
+                <a href="<?= base_url('/modules/auth/login.php') ?>" class="btn btn-light"><i class="bi bi-shield-lock"></i> Login Sistem</a>
+            <?php endif; ?>
+            <a href="#unit-usaha" class="btn btn-outline-light"><i class="bi bi-arrow-down-circle"></i> Lihat Unit Usaha</a>
+        </div>
+        <div class="hero-metrics" aria-label="Ringkasan portal">
+            <div class="hero-metric"><i class="bi bi-grid-1x2-fill"></i><div><b>3 Unit Usaha</b><span>Qmas · SM Corner · Daqam</span></div></div>
+            <div class="hero-metric"><i class="bi bi-link-45deg"></i><div><b>Terintegrasi</b><span>Satu portal, data per unit</span></div></div>
+            <div class="hero-metric"><i class="bi bi-shield-check"></i><div><b>Akses Sesuai Peran</b><span>Super Admin & admin unit</span></div></div>
+        </div>
     </div>
 </section>
 
-<section id="panduan" class="container-fluid px-4 py-5">
-    <div class="text-center mb-4">
-        <h2 class="section-title">Menu Unit Usaha</h2>
-        <p class="text-muted mb-0">Satu pintu masuk untuk seluruh lini bisnis BUMK UMGO</p>
+<section id="unit-usaha" class="container-fluid px-4 py-5" aria-labelledby="unitTitle">
+    <div class="text-center mb-5">
+        <div class="section-eyebrow">Menu Unit Usaha</div>
+        <h2 class="section-title" id="unitTitle">Pilih Unit Usaha Anda</h2>
+        <p class="section-lead mb-0">Setiap unit memiliki dashboard, transaksi, stok, dan laporan tersendiri.</p>
     </div>
 
     <div class="unit-grid">
@@ -59,23 +71,56 @@ require_once __DIR__ . '/../../includes/header.php';
             $unit = unit_by_code($u['code']);
             $color = $unit['color'] ?? '#0B4F3E';
         ?>
-        <div class="unit-card">
+        <article class="unit-card" aria-labelledby="card-<?= e($u['code']) ?>">
             <div class="card-accent" style="background:<?= e($color) ?>"></div>
-            <div class="card-body p-4 text-center">
-                <div class="card-icon mx-auto mb-3" style="background:<?= e($color) ?>"><i class="bi <?= e($u['icon']) ?>"></i></div>
-                <h3 class="card-title"><?= e(strtoupper($unit['name'] ?? $u['code'])) ?></h3>
-                <p class="card-text mt-2 mb-3"><?= e($unit['description'] ?? '') ?></p>
-                <ul class="text-start">
+            <div class="card-body">
+                <div class="card-icon mx-auto" style="background:<?= e($color) ?>"><i class="bi <?= e($u['icon']) ?>" aria-hidden="true"></i></div>
+                <h3 class="card-title text-center" id="card-<?= e($u['code']) ?>"><?= e(strtoupper($unit['name'] ?? $u['code'])) ?></h3>
+                <p class="card-text text-center"><?= e($unit['description'] ?? '') ?></p>
+                <ul>
                     <?php foreach ($u['items'] as $item): ?>
-                        <li><i class="bi bi-check-circle-fill" style="color:<?= e($color) ?>"></i><?= e($item) ?></li>
+                        <li><i class="bi bi-check-circle-fill" style="color:<?= e($color) ?>" aria-hidden="true"></i><?= e($item) ?></li>
                     <?php endforeach; ?>
                 </ul>
                 <a href="<?= e($linkFor($u['code'])) ?>" class="btn btn-unit text-white" style="background:<?= e($color) ?>">
-                    <?= e($u['cta']) ?> <i class="bi bi-arrow-right"></i>
+                    <?= e($u['cta']) ?> <i class="bi bi-arrow-right" aria-hidden="true"></i>
                 </a>
             </div>
-        </div>
+        </article>
         <?php endforeach; ?>
+    </div>
+</section>
+
+<section id="panduan" class="container-fluid px-4 pb-5" aria-labelledby="panduanTitle">
+    <div class="content-card">
+        <div class="card-body p-4 p-lg-5">
+            <div class="section-eyebrow">Panduan Singkat</div>
+            <h2 class="section-title mb-2" id="panduanTitle">Cara Mengakses Dashboard</h2>
+            <p class="section-lead mb-4">Akses disesuaikan dengan peran akun Anda. Super Admin dapat melihat seluruh unit.</p>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-no">1</div>
+                    <h3><i class="bi bi-box-arrow-in-right me-1"></i> Masuk ke Sistem</h3>
+                    <p>Gunakan akun yang telah diberikan. Kasir/Admin masuk lewat kartu unit masing-masing.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-no">2</div>
+                    <h3><i class="bi bi-person-badge me-1"></i> Sesuaikan Hak Akses</h3>
+                    <p>Super Admin melihat omzet gabungan; Admin/Kasir hanya melihat dashboard unitnya.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-no">3</div>
+                    <h3><i class="bi bi-graph-up-arrow me-1"></i> Kelola & Pantau</h3>
+                    <p>Catat transaksi, pantau stok, dan unduh laporan keuangan langsung dari dashboard.</p>
+                </div>
+            </div>
+            <?php if (!$user): ?>
+                <div class="alert alert-light mt-4 mb-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span class="small"><i class="bi bi-info-circle text-success me-1"></i> Belum memiliki akun? Hubungi pengelola BUMK UMGO.</span>
+                    <a href="<?= base_url('/modules/auth/login.php') ?>" class="btn btn-sm btn-success"><i class="bi bi-shield-lock"></i> Masuk Sekarang</a>
+                </div>
+            <?php endif; ?>
+        </div>
     </div>
 </section>
 

@@ -37,34 +37,61 @@ $isPublic = true;
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-5">
-            <div class="card content-card">
-                <div class="card-header bg-white py-3">
-                    <div class="section-title"><i class="bi bi-shield-lock text-success"></i> Login Sistem</div>
-                    <div class="small text-muted">Masuk ke Portal Unit Usaha BUMK UMGO</div>
+<div class="login-shell">
+    <div class="container">
+        <div class="login-wrap">
+            <div class="login-aside">
+                <div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="logo-badge">UMGO</span>
+                        <span class="logo-badge bumk">BUMK</span>
+                    </div>
+                    <h2>Satu portal untuk seluruh unit usaha kampus.</h2>
+                    <p>Kelola transaksi, stok, dan laporan keuangan Qmas Air Mineral, SM Corner, serta Daqam Caffe dari satu tempat.</p>
                 </div>
-                <div class="card-body p-4">
-                    <?php if ($error): ?>
-                        <div class="alert alert-danger"><?= e($error) ?></div>
-                    <?php endif; ?>
-                    <form method="post">
-                        <?php csrf_field(); ?>
-                        <input type="hidden" name="next" value="<?= e($next) ?>">
-                        <div class="mb-3">
-                            <label class="form-label small fw-semibold">Username</label>
-                            <input type="text" name="username" class="form-control" placeholder="Masukkan username" required autofocus autocomplete="username">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-semibold">Password</label>
-                            <input type="password" name="password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
-                        </div>
-                        <button class="btn btn-success w-100 fw-bold" type="submit"><i class="bi bi-box-arrow-in-right"></i> Masuk</button>
-                    </form>
+                <ul class="login-features">
+                    <li><i class="bi bi-bar-chart-line"></i> Dashboard omzet gabungan untuk pimpinan</li>
+                    <li><i class="bi bi-shield-lock"></i> Akses dibatasi sesuai peran pengguna</li>
+                    <li><i class="bi bi-file-earmark-spreadsheet"></i> Laporan dan rekap dapat diekspor</li>
+                </ul>
+                <div class="small" style="color:rgba(255,255,255,.65)">Badan Usaha Milik Kampus · Universitas Muhammadiyah Gorontalo</div>
+            </div>
 
-                    <a href="<?= base_url('/modules/portal/index.php') ?>" class="d-block text-center mt-3 small">← Kembali ke portal utama</a>
+            <div class="login-panel">
+                <div class="section-eyebrow">Selamat datang kembali</div>
+                <h1 class="section-title mb-2"><i class="bi bi-shield-lock text-success"></i> Login Sistem</h1>
+                <p class="section-lead mb-4">Masuk ke Portal Unit Usaha BUMK UMGO.</p>
+
+                <?php if ($error): ?>
+                    <div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle-fill me-2"></i><?= e($error) ?></div>
+                <?php endif; ?>
+
+                <form method="post">
+                    <?php csrf_field(); ?>
+                    <input type="hidden" name="next" value="<?= e($next) ?>">
+                    <div class="mb-3">
+                        <label class="form-label" for="username">Username</label>
+                        <div class="field">
+                            <i class="bi bi-person field-icon" aria-hidden="true"></i>
+                            <input type="text" id="username" name="username" class="form-control" placeholder="Masukkan username" required autofocus autocomplete="username" aria-describedby="usernameHelp">
+                        </div>
+                        <div id="usernameHelp" class="form-text">Gunakan username yang telah terdaftar.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="password">Password</label>
+                        <div class="field">
+                            <i class="bi bi-lock field-icon" aria-hidden="true"></i>
+                            <input type="password" id="password" name="password" class="form-control" placeholder="Masukkan password" required autocomplete="current-password">
+                            <button class="password-toggle" type="button" data-toggle-password="#password" aria-label="Tampilkan password"><i class="bi bi-eye"></i></button>
+                        </div>
+                    </div>
+                    <button class="btn btn-success w-100 fw-bold mt-2" type="submit"><i class="bi bi-box-arrow-in-right"></i> Masuk</button>
+                </form>
+
+                <div class="alert alert-light mt-4 mb-0 small">
+                    <i class="bi bi-info-circle text-success me-1"></i> Lupa password? Hubungi Super Admin untuk melakukan reset akun.
                 </div>
+                <a href="<?= base_url('/modules/portal/index.php') ?>" class="d-block text-center mt-4 small text-muted"><i class="bi bi-arrow-left"></i> Kembali ke portal utama</a>
             </div>
         </div>
     </div>

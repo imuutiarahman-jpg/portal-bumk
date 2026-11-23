@@ -24,16 +24,20 @@ foreach ($pay as $p) { $payLabels[] = strtoupper($p['metode']); $payData[] = (fl
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div><h1 class="section-title mb-1"><i class="bi bi-cup-hot-fill" style="color:var(--daqam)"></i> Dashboard Daqam Caffe</h1><div class="text-muted small">Operasional kafe kampus · <?= date('d F Y') ?></div></div>
+<div class="page-head">
+    <div>
+        <div class="section-eyebrow">Unit Usaha · Daqam</div>
+        <h1 class="section-title"><i class="bi bi-cup-hot-fill" style="color:var(--daqam)"></i> Dashboard Daqam Caffe</h1>
+        <div class="page-sub">Operasional kafe kampus · <?= date('d F Y') ?></div>
+    </div>
     <a href="<?= base_url('/modules/daqam/kasir.php') ?>" class="btn btn-sm text-white fw-bold" style="background:var(--daqam)"><i class="bi bi-cart-plus"></i> Buka Kasir</a>
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PENDAPATAN HARI INI</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value" style="color:var(--daqam)"><?= rupiah($revenue) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">JUMLAH ORDER</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-receipt"></i></span></div><div class="kpi-value"><?= angka($orders) ?> <small class="fs-6 text-muted">order</small></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">MENU PALING LARIS</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-star-fill"></i></span></div><div class="kpi-value fs-6 mt-3"><?= e($best['name'] ?? '-') ?></div><div class="kpi-label"><?= angka($best['qty'] ?? 0) ?> porsi</div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">RATA-RATA TRANSAKSI</span><span class="kpi-icon bg-info-subtle text-info"><i class="bi bi-graph-up"></i></span></div><div class="kpi-value"><?= rupiah($avg) ?></div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PENDAPATAN HARI INI</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value" style="color:var(--daqam)"><?= rupiah($revenue) ?></div><div class="kpi-foot">Order selesai hari ini</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">JUMLAH ORDER</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-receipt"></i></span></div><div class="kpi-value"><?= angka($orders) ?> <small class="fs-6 text-muted">order</small></div><div class="kpi-foot">Rata-rata <?= rupiah($avg) ?> / order</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">MENU PALING LARIS</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-star-fill"></i></span></div><div class="kpi-value fs-6 mt-3"><?= e($best['name'] ?? '-') ?></div><div class="kpi-foot"><?= angka($best['qty'] ?? 0) ?> porsi terjual</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">RATA-RATA TRANSAKSI</span><span class="kpi-icon bg-info-subtle text-info"><i class="bi bi-graph-up"></i></span></div><div class="kpi-value"><?= rupiah($avg) ?></div><?php if ($lowBahan): ?><div class="kpi-trend danger"><i class="bi bi-exclamation-triangle"></i> <?= count($lowBahan) ?> bahan menipis</div><?php else: ?><div class="kpi-trend"><i class="bi bi-check-circle"></i> Bahan baku aman</div><?php endif; ?></div></div>
 </div>
 
 <div class="row g-3 mb-4">

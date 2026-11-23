@@ -29,19 +29,20 @@ foreach ($comp as $c) { $compLabels[] = payment_label($c['status'], $c['bank']);
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
     <div>
-        <h1 class="section-title mb-1"><i class="bi bi-droplet-fill" style="color:var(--qmas)"></i> Dashboard Qmas Air Mineral</h1>
-        <div class="text-muted small">Distribusi, penjualan, dan stok air mineral · <?= date('d F Y') ?></div>
+        <div class="section-eyebrow">Unit Usaha · Qmas</div>
+        <h1 class="section-title"><i class="bi bi-droplet-fill" style="color:var(--qmas)"></i> Dashboard Qmas Air Mineral</h1>
+        <div class="page-sub">Distribusi, penjualan, dan stok air mineral · <?= date('d F Y') ?></div>
     </div>
     <a href="<?= base_url('/modules/qmas/transaksi.php') ?>" class="btn btn-sm text-white" style="background:var(--qmas)"><i class="bi bi-plus-lg"></i> Transaksi Baru</a>
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET HARI INI</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value" style="color:var(--qmas)"><?= rupiah($omzetToday) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">GALON TERJUAL</span><span class="kpi-icon bg-info-subtle text-info"><i class="bi bi-droplet"></i></span></div><div class="kpi-value"><?= angka($galonToday) ?> <small class="fs-6 text-muted">galon</small></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">DUS TERJUAL</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-box-seam"></i></span></div><div class="kpi-value"><?= angka($dusToday) ?> <small class="fs-6 text-muted">dus</small></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">SISA STOK GUDANG</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-archive"></i></span></div><div class="kpi-value"><?= angka($stokTotal) ?> <small class="fs-6 text-muted">unit</small></div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET HARI INI</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value" style="color:var(--qmas)"><?= rupiah($omzetToday) ?></div><div class="kpi-foot">Total piutang <?= rupiah($piutang) ?></div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">GALON TERJUAL</span><span class="kpi-icon bg-info-subtle text-info"><i class="bi bi-droplet"></i></span></div><div class="kpi-value"><?= angka($galonToday) ?> <small class="fs-6 text-muted">galon</small></div><div class="kpi-foot">Penjualan galon hari ini</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">DUS TERJUAL</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-box-seam"></i></span></div><div class="kpi-value"><?= angka($dusToday) ?> <small class="fs-6 text-muted">dus</small></div><div class="kpi-foot">Penjualan dus hari ini</div></div></div>
+    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">SISA STOK GUDANG</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-archive"></i></span></div><div class="kpi-value"><?= angka($stokTotal) ?> <small class="fs-6 text-muted">unit</small></div><?php if ($lowStock): ?><div class="kpi-trend danger"><i class="bi bi-exclamation-triangle"></i> <?= count($lowStock) ?> produk menipis</div><?php else: ?><div class="kpi-trend"><i class="bi bi-check-circle"></i> Semua stok aman</div><?php endif; ?></div></div>
 </div>
 
 <div class="row g-3 mb-4">

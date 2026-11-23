@@ -11,13 +11,13 @@ $user = current_user();
 <?php endif; ?>
 
 <footer class="portal-footer">
-    <div class="container-fluid px-4 d-flex flex-wrap justify-content-between align-items-center h-100 small">
-        <span>&copy; 2026 Badan Usaha Milik Kampus - Universitas Muhammadiyah Gorontalo (UMGO)</span>
-        <span class="d-none d-md-inline">Qmas Air Mineral &nbsp;·&nbsp; Suara Muhammadiyah Corner &nbsp;·&nbsp; Daqam Caffe</span>
+    <div class="container-fluid px-4 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span>&copy; <?= date('Y') ?> Badan Usaha Milik Kampus · Universitas Muhammadiyah Gorontalo</span>
+        <span class="small">Qmas Air Mineral <span class="footer-dot">·</span> Suara Muhammadiyah Corner <span class="footer-dot">·</span> Daqam Caffe</span>
     </div>
 </footer>
 
-<script src="<?= base_url('/assets/js/charts.js') ?>?v=1"></script>
-<script src="<?= base_url('/assets/js/main.js') ?>?v=3"></script>
+<script src="<?= base_url('/assets/js/charts.js') ?>?v=2"></script>
+<script src="<?= base_url('/assets/js/main.js') ?>?v=4"></script>
 </body>
 </html>

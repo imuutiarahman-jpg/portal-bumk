@@ -28,7 +28,7 @@
                 return {
                     label: d.label || 'Data', data: d.data || [],
                     backgroundColor: d.data && d.data.map ? d.data.map(function (_, i) {
-                        return (raw[i] && raw[i].color) || ['#0B4F3E', '#10B981', '#0284C7', '#F59E0B', '#92400E', '#94A3B8'][i % 6];
+                        return (raw[i] && raw[i].color) || ['#0B4F3E', '#10B981', '#0284C7', '#0E7C5A', '#92400E', '#94A3B8'][i % 6];
                     }) : [],
                     borderColor: '#fff', borderWidth: 2, hoverOffset: 6
                 };
@@ -52,12 +52,12 @@
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
-                    legend: { display: isDonut || datasets.length > 1, position: 'bottom', labels: { boxWidth: 12, usePointStyle: true, font: { size: 11 } } },
-                    tooltip: { backgroundColor: '#1F2937', padding: 10, cornerRadius: 8, displayColors: true }
+                    legend: { display: isDonut || datasets.length > 1, position: 'bottom', labels: { boxWidth: 10, usePointStyle: true, font: { size: 11, family: 'Inter, Segoe UI, sans-serif' }, color: '#475569' } },
+                    tooltip: { backgroundColor: '#1B2A26', padding: 10, cornerRadius: 8, displayColors: true, titleFont: { family: 'Inter, Segoe UI, sans-serif' }, bodyFont: { family: 'Inter, Segoe UI, sans-serif' } }
                 },
                 scales: isDonut ? {} : {
-                    x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#6B7280' } },
-                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,.05)' }, ticks: { font: { size: 11 }, color: '#6B7280', callback: function (v) { return v >= 1000 ? (v / 1000) + 'rb' : v; } } }
+                    x: { grid: { display: false }, ticks: { font: { size: 11, family: 'Inter, Segoe UI, sans-serif' }, color: '#64748B' } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(15,23,42,.055)' }, ticks: { font: { size: 11, family: 'Inter, Segoe UI, sans-serif' }, color: '#64748B', callback: function (v) { return v >= 1000 ? (v / 1000) + 'rb' : v; } } }
                 }
             }
         });
