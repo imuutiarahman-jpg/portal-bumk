@@ -116,22 +116,37 @@ function imp_products(): array
     return $map;
 }
 
+/** Gabungkan beberapa baris label menjadi satu peta kolom (index kolom tetap). */
+function imp_merge_label_rows(array $rows): array
+{
+    $merged = [];
+    foreach ($rows as $row) {
+        foreach ($row as $i => $v) {
+            if (trim((string) $v) !== '' && !isset($merged[$i])) $merged[$i] = $v;
+        }
+    }
+    return $merged;
+}
+
 /**
- * Petakan kolom dari label header & sub-header.
+ * Petakan kolom dari kumpulan baris label + sub-header.
  * Mendukung sheet yang memakai "OTT" (bukan QTT), tanpa TGL SETOR,
  * dan HPP hanya pada produk tertentu.
  */
 function imp_build_column_map(array $header, array $sub, int $base): array
 {
     $norm = function ($v): string {
-        return preg_replace('/\s+/', '', strtoupper(trim((string) $v)));
+        return preg_replace('/[\s\x{00A0}]+/u', '', strtoupper(trim((string) $v)));
     };
-    $find = function (array $row, array $labels) use ($norm): ?int {
-        foreach ($row as $i => $c) {
-            $n = $norm($c);
-            if ($n === '') continue;
-            foreach ($labels as $label) {
-                if ($n === $norm($label)) return $i;
+    $find = function (array $rows, array $labels) use ($norm): ?int {
+        if (isset($rows[0]) && !is_array($rows[0])) $rows = [$rows];
+        foreach ($rows as $cols) {
+            foreach ($cols as $i => $c) {
+                $n = $norm($c);
+                if ($n === '') continue;
+                foreach ($labels as $label) {
+                    if ($n === $norm($label)) return $i;
+                }
             }
         }
         return null;
@@ -149,11 +164,11 @@ function imp_build_column_map(array $header, array $sub, int $base): array
     ];
 
     $labelsBySku = [
-        'QMS-G19' => ['QMAS GL 19L', 'QMAS GL19'],
-        'QMS-240' => ['QMAS 240 ML', 'QMAS 240ML'],
-        'QMS-330' => ['QMAS 330ML', 'QMAS 330 ML'],
-        'QMS-B60' => ['QMAS 600 ML', 'QMAS 600ML'],
-        'QMS-B15' => ['QMAS 1.5L', 'QMAS 1,5L'],
+        'QMS-G19' => ['QMAS GL 19L', 'QMAS GL19', 'GL 19L', 'GL19'],
+        'QMS-240' => ['QMAS 240 ML', 'QMAS 240ML', '240 ML', '240ML'],
+        'QMS-330' => ['QMAS 330ML', 'QMAS 330 ML', '330ML', '330 ML'],
+        'QMS-B60' => ['QMAS 600 ML', 'QMAS 600ML', '600 ML', '600ML'],
+        'QMS-B15' => ['QMAS 1.5L', 'QMAS 1,5L', '1.5L', '1,5L'],
     ];
 
     $products = [];
@@ -295,7 +310,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $batchMode = ($_POST['batch_mode'] ?? 'replace') === 'append' ? 'append' : 'replace';
 
             $rows = []; $skipped = []; $warnings = []; $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = '';
-            $headerCols = []; $colMap = null;
+            $headerCols = []; $labelRows = []; $colMap = null;
             while (($cols = fgetcsv($handle, 0, $delim)) !== false) {
                 $lineNo++;
                 if ($lineNo === 1) $cols[0] = preg_replace('/^\xEF\xBB\xBF/', '', $cols[0] ?? '');
@@ -308,6 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (str_contains($joinedSpaced, 'TANGGAL') && str_contains($joinedSpaced, 'NAMA PELANGGAN')) {
                         $headerIndex = $lineNo;
                         $headerCols = $cols;
+                        $labelRows = [$cols];
                         foreach ($cols as $i => $c) {
                             if (strtoupper(trim($c)) === 'TANGGAL') { $base = $i; break; }
                         }
@@ -315,15 +331,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     continue;
                 }
 
-                // Baris sub-header: pakai labelnya untuk memetakan kolom secara dinamis.
-                if ($colMap === null && $headerCols && (str_contains($subUp, 'OTT') || str_contains($subUp, 'QTT')) && str_contains($subUp, 'PRICE')) {
-                    $colMap = imp_build_column_map($headerCols, $cols, $base);
+                $isSubHeader = (str_contains($subUp, 'OTT') || str_contains($subUp, 'QTT'))
+                    && (str_contains($subUp, 'PRICE') || str_contains($subUp, 'HPP'));
+
+                // Kumpulkan baris label antar header dan sub-header (misal label produk & CASH/BANK/TAGIHAN).
+                if ($colMap === null && !$isSubHeader && count($labelRows) < 10) {
+                    $labelRows[] = $cols;
+                }
+
+                if ($colMap === null && $isSubHeader) {
+                    $colMap = imp_build_column_map($labelRows, $cols, $base);
                     if (count($colMap['products']) < 3) $warnings[] = 'Pemetaan otomatis kolom belum lengkap; memakai urutan kolom standar.';
                     continue;
                 }
-                if (str_contains($subUp, 'OTT') || str_contains($subUp, 'QTT')) {
-                    if (str_contains($subUp, 'PRICE') || str_contains($subUp, 'HPP')) continue;
-                }
+                if ($isSubHeader) continue;
 
                 $get = function (int $i) use ($cols, $base): string {
                     return (string) ($cols[$base + $i] ?? '');
@@ -453,16 +474,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($headerIndex === null) {
                 $errors[] = 'Header tidak ditemukan. Pastikan ada kolom TANGGAL dan NAMA PELANGGAN.';
-            } elseif (!$rows) {
-                $errors[] = 'Tidak ada baris transaksi yang bisa dibaca.';
             } else {
                 $batch = strtolower(preg_replace('/[^a-z0-9]+/i', '-', pathinfo($sourceName, PATHINFO_FILENAME)));
+                if ($rows) {
+                    $dupCount = 0;
+                    foreach ($rows as $r) {
+                        $dupCount += (int) val('SELECT COUNT(*) FROM qmas_transactions
+                            WHERE DATE(transaction_date)=? AND customer_name=? AND ABS(total_amount-?) < 1
+                              AND (import_batch IS NULL OR import_batch <> ?)',
+                            [substr($r['date'], 0, 10), $r['nama'], $r['total'], $batch]);
+                    }
+                    if ($dupCount > 0) {
+                        $warnings[] = $dupCount . ' baris memiliki transaksi kembar di batch lain. Jika tidak ingin dobel, hapus batch lama atau gunakan mode timpa.';
+                    }
+                }
                 $_SESSION['qmas_import'] = [
                     'batch' => $batch, 'batch_mode' => $batchMode, 'filename' => $sourceName,
                     'rows' => $rows, 'skipped' => $skipped, 'warnings' => $warnings,
-                    'default_year' => $defaultYear,
+                    'default_year' => $defaultYear, 'column_map' => $colMap,
                 ];
                 $preview = $_SESSION['qmas_import'];
+                if (!$rows) {
+                    $errors[] = 'Tidak ada baris transaksi yang bisa dibaca. Lihat detail baris dilewati dan peta kolom di bawah.';
+                }
             }
             if ($tempFile) @unlink($tempFile);
         }
@@ -553,6 +587,21 @@ require_once __DIR__ . '/../../includes/header.php';
         <?php if (!empty($preview['warnings'])): ?>
             <div class="alert alert-info small py-2"><b>Perlu diperiksa (<?= count($preview['warnings']) ?>):</b><br><?= e(implode(' · ', array_slice($preview['warnings'], 0, 10))) ?><?= count($preview['warnings']) > 10 ? ' …' : '' ?></div>
         <?php endif; ?>
+        <?php if (!empty($preview['column_map'])):
+            $cm = $preview['column_map'];
+            $mapInfo = [];
+            foreach (['tanggal' => 'TANGGAL', 'nama' => 'NAMA', 'lunas' => 'TGL LUNAS', 'setor' => 'TGL SETOR', 'cash' => 'CASH', 'bank' => 'BANK', 'tagihan' => 'TAGIHAN', 'ket' => 'KET'] as $key => $label) {
+                if (isset($cm['fields'][$key]) && $cm['fields'][$key] !== null) $mapInfo[] = $label . ' → kolom ' . ($cm['fields'][$key] + 1);
+            }
+            $prodInfo = [];
+            foreach ($cm['products'] ?? [] as $p) $prodInfo[] = $p['sku'] . '(QTT:' . ($p['qty'] + 1) . ',PRICE:' . ($p['price'] + 1) . ')';
+        ?>
+            <div class="alert alert-light small py-2">
+                <b>Peta kolom terdeteksi:</b> <?= e(implode(' · ', $mapInfo)) ?><br>
+                <b>Produk:</b> <?= e(implode(' · ', $prodInfo) ?: '-') ?>
+                <div class="mt-1">Batch: <b><?= e($preview['batch']) ?></b> · Mode: <?= $preview['batch_mode'] === 'append' ? 'batch baru' : 'timpa batch sama' ?></div>
+            </div>
+        <?php endif; ?>
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
                 <thead class="table-light"><tr><th>#</th><th>Tanggal</th><th>Pelanggan</th><th>Item</th><th>CASH</th><th>BANK</th><th>TAGIHAN</th><th>KET</th><th>Status</th><th class="text-end">Total</th></tr></thead>
@@ -576,7 +625,9 @@ require_once __DIR__ . '/../../includes/header.php';
         </div>
         <?php if (count($preview['rows']) > 40): ?><div class="small text-muted mt-2">Menampilkan 40 baris pertama dari <?= count($preview['rows']) ?> baris.</div><?php endif; ?>
         <div class="d-flex gap-2 mt-3">
+            <?php if (count($preview['rows']) > 0): ?>
             <form method="post"><?php csrf_field(); ?><input type="hidden" name="action" value="import"><button class="btn btn-primary"><i class="bi bi-check2-circle"></i> Import <?= count($preview['rows']) ?> Transaksi</button></form>
+            <?php endif; ?>
             <form method="post"><?php csrf_field(); ?><input type="hidden" name="action" value="batal"><button class="btn btn-outline-secondary">Batal</button></form>
         </div>
     </div>
