@@ -105,7 +105,7 @@ img { max-width: 100%; }
     box-shadow: 0 4px 10px rgba(16, 185, 129, .22);
 }
 .header-logo { display: block; flex: 0 0 auto; object-fit: contain; }
-.header-logo.umgo { height: 36px; width: auto; mix-blend-mode: multiply; }
+.header-logo.umgo { height: 38px; width: 38px; }
 .logo-crop {
     display: inline-flex; width: 38px; height: 38px; border-radius: 9px;
     overflow: hidden; background: #fff; border: 1px solid var(--line); flex: 0 0 auto;
@@ -383,7 +383,7 @@ img { max-width: 100%; }
 .login-aside > * { position: relative; z-index: 1; }
 .login-aside .logo-badge { background: rgba(255,255,255,.15); box-shadow: none; }
 .login-logo { display: block; object-fit: contain; }
-.login-logo.umgo { height: 46px; width: auto; mix-blend-mode: multiply; }
+.login-logo.umgo { height: 56px; width: 56px; }
 .login-logo-wrap {
     display: inline-flex; width: 56px; height: 56px; border-radius: 14px;
     overflow: hidden; background: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.16); flex: 0 0 auto;
@@ -498,10 +498,10 @@ img { max-width: 100%; }
     .hero-metrics { gap: 16px; margin-top: 24px; }
     .hero-metric b { font-size: 13px; }
     .portal-title { display: none; }
-    .header-logo.umgo { height: 30px; }
+    .header-logo.umgo { height: 32px; width: 32px; }
     .logo-crop { width: 32px; height: 32px; }
     .logo-crop .header-logo.bumk { width: 64px; height: 64px; margin: -8px 0 0 -16px; }
-    .login-logo.umgo { height: 38px; }
+    .login-logo.umgo { height: 46px; width: 46px; }
     .login-logo-wrap { width: 46px; height: 46px; }
     .login-logo-wrap .login-logo.bumk { width: 92px; height: 92px; margin: -12px 0 0 -23px; }
     .portal-footer { padding: 12px 0; }
