@@ -309,7 +309,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $defaultYear = ($yearRaw >= 2000 && $yearRaw <= 2100) ? $yearRaw : (int) date('Y');
             $batchMode = ($_POST['batch_mode'] ?? 'replace') === 'append' ? 'append' : 'replace';
 
-            $rows = []; $skipped = []; $warnings = []; $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = '';
+            $rows = []; $skipped = []; $warnings = []; $qtyByProduct = [];
+            $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = '';
             $headerCols = []; $labelRows = []; $colMap = null;
             while (($cols = fgetcsv($handle, 0, $delim)) !== false) {
                 $lineNo++;
@@ -416,7 +417,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if (isset($products[$sku])) { $product = $products[$sku]; break; }
                     }
                     if (!$product) { $skipped[] = "Baris $lineNo: produk {$pd['sku']} belum ada"; continue; }
-                    if ($price <= 0) $price = (float) $product['price'];
+                    if ($price <= 0) {
+                        if (count($warnings) < 50) {
+                            $warnings[] = "Baris $lineNo: QTT {$pd['sku']} terisi tetapi PRICE kosong — harga master dipakai";
+                        }
+                        $price = (float) $product['price'];
+                    }
                     $cost = $pd['hpp'] !== '' ? imp_money($pd['hpp']) : (float) $product['cost'];
                     if ($cost > 0) $hpp = $cost;
                     $subtotal = $qty * $price;
@@ -431,6 +437,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($received > 0 && $total > $received * 10) {
                     $skipped[] = "Baris $lineNo: total " . rupiah($total) . " tidak wajar terhadap penerimaan kas " . rupiah($received);
                     continue;
+                }
+
+                foreach ($items as $it) {
+                    $sku = $it['product']['sku'];
+                    $qtyByProduct[$sku] = ($qtyByProduct[$sku] ?? 0) + $it['qty'];
                 }
 
                 // PENERIMAAN KAS: BANK → Transfer, CASH → Tunai, TAGIHAN → Piutang
@@ -491,6 +502,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['qmas_import'] = [
                     'batch' => $batch, 'batch_mode' => $batchMode, 'filename' => $sourceName,
                     'rows' => $rows, 'skipped' => $skipped, 'warnings' => $warnings,
+                    'qty_by_product' => $qtyByProduct,
                     'default_year' => $defaultYear, 'column_map' => $colMap,
                 ];
                 $preview = $_SESSION['qmas_import'];
@@ -601,6 +613,18 @@ require_once __DIR__ . '/../../includes/header.php';
                 <b>Produk:</b> <?= e(implode(' · ', $prodInfo) ?: '-') ?>
                 <div class="mt-1">Batch: <b><?= e($preview['batch']) ?></b> · Mode: <?= $preview['batch_mode'] === 'append' ? 'batch baru' : 'timpa batch sama' ?></div>
             </div>
+        <?php endif; ?>
+        <?php if (!empty($preview['qty_by_product'])):
+            $qtyInfo = [];
+            foreach ($preview['qty_by_product'] as $sku => $qty) {
+                $label = $sku;
+                foreach (($preview['column_map']['products'] ?? []) as $p) {
+                    if ($p['sku'] === $sku) { $label = $p['sku']; break; }
+                }
+                $qtyInfo[] = $label . ': ' . angka($qty);
+            }
+        ?>
+            <div class="alert alert-success small py-2"><b>Total QTT per produk (sesuai sheet):</b> <?= e(implode(' · ', $qtyInfo)) ?></div>
         <?php endif; ?>
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
