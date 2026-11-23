@@ -150,7 +150,7 @@ Bagian "Alur Sistem & Struktur Database" yang disebut di dokumen tetapi tidak di
 3. Periksa hasil pratinjau (jumlah transaksi, status, bank, baris yang dilewati), lalu klik **Import**.
 4. Import ulang dengan **link/file yang sama** akan menimpa batch lama (tidak dobel). Transaksi manual yang dibuat lewat form tidak terpengaruh.
 
-**Urutan kolom yang dibaca** (mengikuti sheet asli: tiap produk punya QTT, PRICE, HPP; ada kolom LABA/RUGI; header boleh tiga baris dan ada baris "BULAN …" — semuanya dilewati otomatis):
+**Urutan kolom yang dibaca** (mengikuti sheet asli: tiap produk punya QTT/OTT, PRICE, HPP; ada kolom LABA/RUGI; header boleh tiga baris dan ada baris "BULAN …" — semuanya dilewati otomatis). Import kini **mendeteksi posisi kolom dari label header/sub-header**, sehingga tetap benar jika sheet memakai `OTT` (bukan `QTT`), tidak memiliki `TGL SETOR`, atau HPP hanya ada pada produk tertentu. QTT yang tidak wajar (misal harga terbaca sebagai jumlah) otomatis ditolak.
 
 `TANGGAL | NAMA PELANGGAN | TGL LUNAS | TGL SETOR | GL19 QTT | GL19 PRICE | GL19 HPP | 240ML QTT | 240ML PRICE | 240ML HPP | 330ML QTT | 330ML PRICE | 330ML HPP | 600ML QTT | 600ML PRICE | 600ML HPP | 1.5L QTT | 1.5L PRICE | 1.5L HPP | LABA/RUGI | CASH | BANK | TAGIHAN | KET`
 

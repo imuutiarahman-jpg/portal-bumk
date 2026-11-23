@@ -68,19 +68,24 @@ function imp_date(string $s, ?int $defaultYear = null): ?string
         'nov' => 11, 'nop' => 11, 'november' => 11, 'des' => 12, 'desember' => 12, 'dec' => 12,
     ];
 
-    // "5 Jan 2025" / "5 Jan" (tahun diambil dari input tahun default)
-    if (preg_match('/^(\d{1,2})\s*([A-Za-z]+)\.?(?:\s+(\d{2,4}))?$/u', $s, $m)) {
+    // "8-Feb-25" / "5 Jan 2025" / "5 Jan" → samakan pemisahnya dulu
+    $sNorm = preg_replace('/[\/\-]/', ' ', $s);
+    if (preg_match('/^(\d{1,2})\s*([A-Za-z]+)\.?(?:\s+(\d{2,4}))?$/u', $sNorm, $m)) {
+        $day = (int) $m[1];
+        if ($day < 1 || $day > 31) return null;
         $key = strtolower($m[2]);
         if (!isset($months[$key])) return null;
         return sprintf('%04d-%02d-%02d 00:00:00',
-            $resolveYear($m[3] ?? 0), $months[$key], (int) $m[1]);
+            $resolveYear($m[3] ?? 0), $months[$key], $day);
     }
     // "Nov 5, 2025" / "November 5"
-    if (preg_match('/^([A-Za-z]+)\.?\s+(\d{1,2})(?:,?\s+(\d{2,4}))?$/u', $s, $m)) {
+    if (preg_match('/^([A-Za-z]+)\.?\s+(\d{1,2})(?:,?\s+(\d{2,4}))?$/u', $sNorm, $m)) {
+        $day = (int) $m[2];
+        if ($day < 1 || $day > 31) return null;
         $key = strtolower($m[1]);
         if (!isset($months[$key])) return null;
         return sprintf('%04d-%02d-%02d 00:00:00',
-            $resolveYear($m[3] ?? 0), $months[$key], (int) $m[2]);
+            $resolveYear($m[3] ?? 0), $months[$key], $day);
     }
     return null;
 }
@@ -109,6 +114,67 @@ function imp_products(): array
         foreach (all('SELECT * FROM qmas_products WHERE is_active=1') as $p) $map[$p['sku']] = $p;
     }
     return $map;
+}
+
+/**
+ * Petakan kolom dari label header & sub-header.
+ * Mendukung sheet yang memakai "OTT" (bukan QTT), tanpa TGL SETOR,
+ * dan HPP hanya pada produk tertentu.
+ */
+function imp_build_column_map(array $header, array $sub, int $base): array
+{
+    $norm = function ($v): string {
+        return preg_replace('/\s+/', '', strtoupper(trim((string) $v)));
+    };
+    $find = function (array $row, array $labels) use ($norm): ?int {
+        foreach ($row as $i => $c) {
+            $n = $norm($c);
+            if ($n === '') continue;
+            foreach ($labels as $label) {
+                if ($n === $norm($label)) return $i;
+            }
+        }
+        return null;
+    };
+
+    $fields = [
+        'tanggal' => $find($header, ['TANGGAL']),
+        'nama'    => $find($header, ['NAMA PELANGGAN', 'NAMA']),
+        'lunas'   => $find($header, ['TGL LUNAS', 'TGLLUNAS']),
+        'setor'   => $find($header, ['TGL SETOR', 'TGLSETOR']),
+        'cash'    => $find($header, ['CASH']),
+        'bank'    => $find($header, ['BANK']),
+        'tagihan' => $find($header, ['TAGIHAN']),
+        'ket'     => $find($header, ['KET', 'KETERANGAN']),
+    ];
+
+    $labelsBySku = [
+        'QMS-G19' => ['QMAS GL 19L', 'QMAS GL19'],
+        'QMS-240' => ['QMAS 240 ML', 'QMAS 240ML'],
+        'QMS-330' => ['QMAS 330ML', 'QMAS 330 ML'],
+        'QMS-B60' => ['QMAS 600 ML', 'QMAS 600ML'],
+        'QMS-B15' => ['QMAS 1.5L', 'QMAS 1,5L'],
+    ];
+
+    $products = [];
+    foreach ($labelsBySku as $sku => $labels) {
+        $start = $find($header, $labels);
+        if ($start === null) continue;
+        $qty = $price = $hpp = null;
+        $end = min(count($sub) - 1, $start + 3);
+        for ($i = $start; $i <= $end; $i++) {
+            $n = $norm($sub[$i] ?? '');
+            // OTT kedua berarti sudah masuk blok produk berikutnya.
+            if (($n === 'OTT' || $n === 'QTT') && $qty !== null) break;
+            if ($n === 'OTT' || $n === 'QTT') $qty = $i;
+            elseif ($n === 'PRICE') $price = $i;
+            elseif ($n === 'HPP') $hpp = $i;
+        }
+        if ($qty !== null && $price !== null) {
+            $products[] = ['sku' => $sku, 'qty' => $qty, 'price' => $price, 'hpp' => $hpp];
+        }
+    }
+    return ['fields' => $fields, 'products' => $products, 'base' => $base];
 }
 
 /** Ubah URL share Google Sheets menjadi URL export CSV. */
@@ -229,67 +295,124 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $batchMode = ($_POST['batch_mode'] ?? 'replace') === 'append' ? 'append' : 'replace';
 
             $rows = []; $skipped = []; $warnings = []; $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = '';
+            $headerCols = []; $colMap = null;
             while (($cols = fgetcsv($handle, 0, $delim)) !== false) {
                 $lineNo++;
                 if ($lineNo === 1) $cols[0] = preg_replace('/^\xEF\xBB\xBF/', '', $cols[0] ?? '');
                 $cols = array_map('trim', $cols);
+                $joined = implode('', $cols);
+                $subUp = strtoupper($joined);
 
                 if ($headerIndex === null) {
-                    $joined = strtoupper(implode(' ', $cols));
-                    if (str_contains($joined, 'TANGGAL') && str_contains($joined, 'NAMA PELANGGAN')) {
+                    $joinedSpaced = strtoupper(implode(' ', $cols));
+                    if (str_contains($joinedSpaced, 'TANGGAL') && str_contains($joinedSpaced, 'NAMA PELANGGAN')) {
                         $headerIndex = $lineNo;
+                        $headerCols = $cols;
                         foreach ($cols as $i => $c) {
-                            if (strtoupper($c) === 'TANGGAL') { $base = $i; break; }
+                            if (strtoupper(trim($c)) === 'TANGGAL') { $base = $i; break; }
                         }
                     }
                     continue;
                 }
 
+                // Baris sub-header: pakai labelnya untuk memetakan kolom secara dinamis.
+                if ($colMap === null && $headerCols && (str_contains($subUp, 'OTT') || str_contains($subUp, 'QTT')) && str_contains($subUp, 'PRICE')) {
+                    $colMap = imp_build_column_map($headerCols, $cols, $base);
+                    if (count($colMap['products']) < 3) $warnings[] = 'Pemetaan otomatis kolom belum lengkap; memakai urutan kolom standar.';
+                    continue;
+                }
+                if (str_contains($subUp, 'OTT') || str_contains($subUp, 'QTT')) {
+                    if (str_contains($subUp, 'PRICE') || str_contains($subUp, 'HPP')) continue;
+                }
+
                 $get = function (int $i) use ($cols, $base): string {
                     return (string) ($cols[$base + $i] ?? '');
                 };
+                $cell = function (int $i) use ($cols): string {
+                    return (string) ($cols[$i] ?? '');
+                };
+                $field = function (string $key, int $fallback) use ($colMap, $cell, $get): string {
+                    if ($colMap && isset($colMap['fields'][$key]) && $colMap['fields'][$key] !== null) {
+                        return $cell($colMap['fields'][$key]);
+                    }
+                    return $get($fallback);
+                };
 
-                $joined = implode('', $cols);
                 if ($joined === '') continue;
                 if (stripos($get(0), 'BULAN') === 0) continue;
                 // Baris sub-header (QTT, PRICE, HPP, LABA/RUGI) bukan transaksi
                 if (str_contains(strtoupper($joined), 'QTT') && str_contains(strtoupper($joined), 'PRICE')) continue;
                 if ($get(0) === '' && $get(1) === '') continue;
 
-                $dateRaw = $get(0);
+                $dateRaw = $field('tanggal', 0);
                 if ($dateRaw !== '') $lastDateRaw = $dateRaw;
                 $date = imp_date($lastDateRaw, $defaultYear);
-                $nama = $get(1);
+                $nama = $field('nama', 1);
                 if ($nama === '') continue;
                 if (!$date) { $skipped[] = "Baris $lineNo: tanggal '$lastDateRaw' tidak dikenali"; continue; }
 
+                $bankAmount = imp_money($field('bank', 21));
+                $cash       = imp_money($field('cash', 20));
+                $tagihan    = imp_money($field('tagihan', 22));
+                $ket        = $field('ket', 23);
+
                 $products = imp_products();
-                $items = []; $total = 0.0; $hpp = 0.0;
-                foreach ($productCols as $pc) {
-                    $qty = imp_int($get($pc['qty']));
+                $productDefs = [];
+                if ($colMap && count($colMap['products']) >= 3) {
+                    foreach ($colMap['products'] as $mp) {
+                        $productDefs[] = [
+                            'sku' => $mp['sku'],
+                            'qty' => $cell($mp['qty']),
+                            'price' => $cell($mp['price']),
+                            'hpp' => $mp['hpp'] !== null ? $cell($mp['hpp']) : '',
+                        ];
+                    }
+                } else {
+                    foreach ($productCols as $pc) {
+                        $productDefs[] = [
+                            'sku' => $pc['sku'],
+                            'qty' => $get($pc['qty']),
+                            'price' => $get($pc['price']),
+                            'hpp' => $pc['hpp'] !== null ? $get($pc['hpp']) : '',
+                        ];
+                    }
+                }
+
+                $items = []; $total = 0.0; $hpp = 0.0; $qtyInvalid = false;
+                foreach ($productDefs as $pd) {
+                    $qty = imp_int($pd['qty']);
                     if ($qty < 1) continue;
-                    $price = imp_money($get($pc['price']));
+                    if ($qty > 5000) {
+                        $qtyInvalid = true;
+                        $skipped[] = "Baris $lineNo: QTT '$qty' tidak wajar — kemungkinan kolom PRICE terbaca sebagai QTT";
+                        continue;
+                    }
+                    $price = imp_money($pd['price']);
                     // 240 ML punya SKU lama QMS-G22 di sebagian database.
-                    $skus = $pc['sku'] === 'QMS-240' ? ['QMS-240', 'QMS-G22'] : [$pc['sku']];
+                    $skus = $pd['sku'] === 'QMS-240' ? ['QMS-240', 'QMS-G22'] : [$pd['sku']];
                     $product = null;
                     foreach ($skus as $sku) {
                         if (isset($products[$sku])) { $product = $products[$sku]; break; }
                     }
-                    if (!$product) { $skipped[] = "Baris $lineNo: produk {$pc['sku']} belum ada"; continue; }
+                    if (!$product) { $skipped[] = "Baris $lineNo: produk {$pd['sku']} belum ada"; continue; }
                     if ($price <= 0) $price = (float) $product['price'];
-                    $cost = $pc['hpp'] !== null ? imp_money($get($pc['hpp'])) : (float) $product['cost'];
+                    $cost = $pd['hpp'] !== '' ? imp_money($pd['hpp']) : (float) $product['cost'];
                     if ($cost > 0) $hpp = $cost;
                     $subtotal = $qty * $price;
                     $items[] = ['product' => $product, 'qty' => $qty, 'price' => $price, 'cost' => $cost, 'subtotal' => $subtotal];
                     $total += $subtotal;
                 }
+                if ($qtyInvalid) continue;
                 if (!$items) { $skipped[] = "Baris $lineNo: tidak ada item dengan QTT"; continue; }
 
+                // Pengaman tambahan: total tidak boleh jauh di atas uang yang diterima.
+                $received = $bankAmount + $cash + $tagihan;
+                if ($received > 0 && $total > $received * 10) {
+                    $skipped[] = "Baris $lineNo: total " . rupiah($total) . " tidak wajar terhadap penerimaan kas " . rupiah($received);
+                    continue;
+                }
+
                 // PENERIMAAN KAS: BANK → Transfer, CASH → Tunai, TAGIHAN → Piutang
-                $bankAmount = imp_money($get(21));
-                $cash       = imp_money($get(20));
-                $tagihan    = imp_money($get(22));
-                $ket        = $get(23);
                 if ($bankAmount > 0) {
                     $status = 'transfer';
                     $bank = imp_bank($ket);
@@ -302,17 +425,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $status = 'tunai'; $bank = null;
                 }
 
-                $lunasRaw = $get(2);
+                $lunasRaw = $field('lunas', 2);
                 $lunasDate = imp_date($lunasRaw, $defaultYear);
                 if (!$lunasDate && stripos($lunasRaw, 'lunas') !== false) {
-                    $lunasDate = imp_date($get(3), $defaultYear); // TGL LUNAS "Lunas" → pakai TGL SETOR
+                    $lunasDate = imp_date($field('setor', 3), $defaultYear); // TGL LUNAS "Lunas" → pakai TGL SETOR
                 }
+                $setorRaw = $colMap && isset($colMap['fields']['setor']) && $colMap['fields']['setor'] === null
+                    ? '' : $field('setor', 3);
 
                 $rows[] = [
                     'date'        => $date,
                     'nama'        => $nama,
                     'lunas_date'  => $lunasDate,
-                    'setor_date'  => imp_date($get(3), $defaultYear),
+                    'setor_date'  => imp_date($setorRaw, $defaultYear),
                     'status'      => $status,
                     'bank'        => $bank,
                     'total'       => $total,
