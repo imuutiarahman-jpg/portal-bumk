@@ -327,7 +327,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $batchMode = ($_POST['batch_mode'] ?? 'replace') === 'append' ? 'append' : 'replace';
 
-            $rows = []; $skipped = []; $warnings = []; $qtyByProduct = []; $monthCount = [];
+            $rows = []; $skipped = []; $warnings = [];
+            $qtyByProduct = []; $qtyByMonthProduct = []; $sheetTotals = []; $monthCount = [];
+            $currentMonthKey = null;
+            $monthNames = [
+                'JANUARI' => 1, 'FEBRUARI' => 2, 'MARET' => 3, 'APRIL' => 4, 'MEI' => 5, 'JUNI' => 6,
+                'JULI' => 7, 'AGUSTUS' => 8, 'SEPTEMBER' => 9, 'OKTOBER' => 10, 'NOVEMBER' => 11, 'DESEMBER' => 12,
+            ];
             $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = '';
             $headerCols = []; $labelRows = []; $colMap = null;
             while (($cols = fgetcsv($handle, 0, $delim)) !== false) {
@@ -379,7 +385,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 };
 
                 if ($joined === '') continue;
-                if (stripos($get(0), 'BULAN') === 0) continue;
+
+                // Baris pemisah bulan: simpan kunci YYYY-MM untuk QTT per bulan.
+                if (stripos($get(0), 'BULAN') === 0) {
+                    $namaBulan = preg_replace('/^BULAN\s*/i', '', strtoupper(trim($get(0))));
+                    $namaBulan = preg_replace('/[^A-Z]/', '', $namaBulan);
+                    if (isset($monthNames[$namaBulan])) {
+                        $currentMonthKey = sprintf('%04d-%02d', $defaultYear, $monthNames[$namaBulan]);
+                    }
+                    continue;
+                }
+                // Baris ringkasan sheet: simpan angka TOTAL PRODUK TERJUAL sebagai pembanding.
+                if (str_contains(strtoupper($get(0)), 'TOTAL PRODUK TERJUAL')) {
+                    if ($currentMonthKey && $colMap) {
+                        $prodMap = imp_products();
+                        foreach ($colMap['products'] as $mp) {
+                            $sku = $mp['sku'];
+                            if ($sku === 'QMS-240' && !isset($prodMap['QMS-240']) && isset($prodMap['QMS-G22'])) {
+                                $sku = 'QMS-G22';
+                            }
+                            $sheetTotals[$currentMonthKey][$sku] = imp_int($cell($mp['qty']));
+                        }
+                    }
+                    continue;
+                }
                 // Baris sub-header (QTT, PRICE, HPP, LABA/RUGI) bukan transaksi
                 if (str_contains(strtoupper($joined), 'QTT') && str_contains(strtoupper($joined), 'PRICE')) continue;
                 if ($get(0) === '' && $get(1) === '') continue;
@@ -463,6 +492,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 foreach ($items as $it) {
                     $sku = $it['product']['sku'];
                     $qtyByProduct[$sku] = ($qtyByProduct[$sku] ?? 0) + $it['qty'];
+                    if ($currentMonthKey) {
+                        $qtyByMonthProduct[$currentMonthKey][$sku] = ($qtyByMonthProduct[$currentMonthKey][$sku] ?? 0) + $it['qty'];
+                    }
                 }
                 $monthKey = date('Y-m', strtotime($date));
                 $monthCount[$monthKey] = ($monthCount[$monthKey] ?? 0) + 1;
@@ -506,6 +538,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             fclose($handle);
 
+            $qtyMismatch = [];
+            $skuLabels = [
+                'QMS-G19' => 'GL19', 'QMS-240' => '240 ML', 'QMS-G22' => '240 ML',
+                'QMS-330' => '330 ML', 'QMS-B60' => '600 ML', 'QMS-B15' => '1.5L',
+            ];
+            foreach ($sheetTotals as $m => $vals) {
+                foreach ($vals as $sku => $sheetQty) {
+                    $calcQty = (int) ($qtyByMonthProduct[$m][$sku] ?? 0);
+                    if ((int) $sheetQty !== $calcQty) {
+                        $label = $skuLabels[$sku] ?? $sku;
+                        $qtyMismatch[] = date('M Y', strtotime($m . '-01')) . ' · ' . $label
+                            . ': transaksi ' . angka($calcQty) . ' vs sheet ' . angka((int) $sheetQty);
+                    }
+                }
+            }
+
             if ($headerIndex === null) {
                 $errors[] = 'Header tidak ditemukan. Pastikan ada kolom TANGGAL dan NAMA PELANGGAN.';
             } else {
@@ -525,7 +573,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['qmas_import'] = [
                     'batch' => $batch, 'batch_mode' => $batchMode, 'filename' => $sourceName,
                     'rows' => $rows, 'skipped' => $skipped, 'warnings' => $warnings,
-                    'qty_by_product' => $qtyByProduct, 'month_count' => $monthCount,
+                    'qty_by_product' => $qtyByProduct, 'qty_by_month' => $qtyByMonthProduct,
+                    'sheet_totals' => $sheetTotals, 'qty_mismatch' => $qtyMismatch,
+                    'month_count' => $monthCount,
                     'detected_year' => $detectedYear,
                     'default_year' => $defaultYear, 'column_map' => $colMap,
                 ];
@@ -655,7 +705,54 @@ require_once __DIR__ . '/../../includes/header.php';
                 $qtyInfo[] = $label . ': ' . angka($qty);
             }
         ?>
-            <div class="alert alert-success small py-2"><b>Total QTT per produk (sesuai sheet):</b> <?= e(implode(' · ', $qtyInfo)) ?></div>
+            <div class="alert alert-success small py-2"><b>Total QTT per produk (seluruh bulan):</b> <?= e(implode(' · ', $qtyInfo)) ?></div>
+        <?php endif; ?>
+        <?php if (!empty($preview['qty_by_month'])):
+            $skus = array_keys($preview['qty_by_product']);
+            if (!$skus) $skus = array_column($preview['column_map']['products'] ?? [], 'sku');
+            $qtyLabels = [
+                'QMS-G19' => 'GL19', 'QMS-240' => '240 ML', 'QMS-G22' => '240 ML',
+                'QMS-330' => '330 ML', 'QMS-B60' => '600 ML', 'QMS-B15' => '1,5L',
+            ];
+            $byMonth = $preview['qty_by_month'];
+            ksort($byMonth);
+        ?>
+            <div class="alert alert-light small py-2 mb-2"><b>QTT per bulan</b> dihitung dari baris transaksi. Bandingkan dengan baris <code>TOTAL PRODUK TERJUAL</code> di sheet.</div>
+            <div class="table-responsive mb-3">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light"><tr><th>Bulan</th><?php foreach ($skus as $sku): ?><th class="text-end"><?= e($qtyLabels[$sku] ?? $sku) ?></th><?php endforeach; ?><th>Cocok</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($byMonth as $m => $vals):
+                        $sheetRow = $preview['sheet_totals'][$m] ?? [];
+                        $beda = false;
+                        foreach ($skus as $sku) {
+                            $hitung = (int) ($vals[$sku] ?? 0);
+                            $sheetQty = isset($sheetRow[$sku]) ? (int) $sheetRow[$sku] : null;
+                            if ($sheetQty !== null && $sheetQty !== $hitung) { $beda = true; }
+                        }
+                    ?>
+                        <tr>
+                            <td class="small fw-semibold"><?= e(date('M Y', strtotime($m . '-01'))) ?></td>
+                            <?php foreach ($skus as $sku):
+                                $hitung = (int) ($vals[$sku] ?? 0);
+                                $sheetQty = isset($sheetRow[$sku]) ? (int) $sheetRow[$sku] : null;
+                            ?>
+                                <td class="text-end small">
+                                    <?= angka($hitung) ?>
+                                    <?php if ($sheetQty !== null && $sheetQty !== $hitung): ?>
+                                        <div class="text-danger" style="font-size:11px">sheet: <?= angka($sheetQty) ?></div>
+                                    <?php endif; ?>
+                                </td>
+                            <?php endforeach; ?>
+                            <td><?php if (!$sheetRow): ?><span class="text-muted small">-</span><?php elseif ($beda): ?><span class="badge bg-danger">Selisih</span><?php else: ?><span class="badge bg-success">Sama</span><?php endif; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php if (!empty($preview['qty_mismatch'])): ?>
+                <div class="alert alert-warning small py-2"><b>Selisih QTT vs ringkasan sheet (<?= count($preview['qty_mismatch']) ?>):</b><br><?= e(implode(' · ', array_slice($preview['qty_mismatch'], 0, 12))) ?><?= count($preview['qty_mismatch']) > 12 ? ' …' : '' ?></div>
+            <?php endif; ?>
         <?php endif; ?>
         <?php if (!empty($preview['month_count'])):
             ksort($preview['month_count']);
