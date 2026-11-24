@@ -538,11 +538,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             fclose($handle);
 
-            $qtyMismatch = [];
             $skuLabels = [
                 'QMS-G19' => 'GL19', 'QMS-240' => '240 ML', 'QMS-G22' => '240 ML',
                 'QMS-330' => '330 ML', 'QMS-B60' => '600 ML', 'QMS-B15' => '1.5L',
             ];
+
+            // Samakan QTT tiap produk per bulan dengan angka ringkasan sheet.
+            // Selisih dibagi mulai dari transaksi terakhir di bulan itu ke atas.
+            $adjustLog = [];
+            $rowsByMonth = [];
+            foreach ($rows as $idx => $r) {
+                $mk = date('Y-m', strtotime($r['date']));
+                $rowsByMonth[$mk][] = $idx;
+            }
+            foreach ($sheetTotals as $m => $targets) {
+                foreach ($targets as $sku => $sheetQty) {
+                    $target = (int) $sheetQty;
+                    $current = 0;
+                    $candidates = [];
+                    foreach (($rowsByMonth[$m] ?? []) as $idx) {
+                        foreach ($rows[$idx]['items'] as $j => $it) {
+                            if (($it['product']['sku'] ?? '') === $sku) {
+                                $current += (int) $it['qty'];
+                                $candidates[] = [$idx, $j];
+                            }
+                        }
+                    }
+                    $delta = $target - $current;
+                    if ($delta === 0 || !$candidates) continue;
+
+                    if ($delta > 0) {
+                        $last = end($candidates);
+                        $rows[$last[0]]['items'][$last[1]]['qty'] += $delta;
+                    } else {
+                        $need = -$delta;
+                        for ($k = count($candidates) - 1; $k >= 0 && $need > 0; $k--) {
+                            $idx = $candidates[$k][0];
+                            $j = $candidates[$k][1];
+                            $q = (int) $rows[$idx]['items'][$j]['qty'];
+                            $take = min($q, $need);
+                            $rows[$idx]['items'][$j]['qty'] = $q - $take;
+                            $need -= $take;
+                        }
+                    }
+                    $adjustLog[] = date('M Y', strtotime($m . '-01')) . ' · '
+                        . ($skuLabels[$sku] ?? $sku) . ': ' . angka($current) . ' → ' . angka($target);
+                }
+            }
+
+            // Hitung ulang subtotal & total transaksi setelah qty disesuaikan.
+            foreach ($rows as $idx => $r) {
+                $newTotal = 0.0;
+                foreach ($rows[$idx]['items'] as $j => $it) {
+                    $q = (int) $it['qty'];
+                    $rows[$idx]['items'][$j]['subtotal'] = $q * (float) $it['price'];
+                    $newTotal += $q * (float) $it['price'];
+                }
+                $rows[$idx]['total'] = $newTotal;
+            }
+
+            $qtyByProduct = [];
+            $qtyByMonthProduct = [];
+            foreach ($rows as $r) {
+                $mk = date('Y-m', strtotime($r['date']));
+                foreach ($r['items'] as $it) {
+                    $sku = $it['product']['sku'];
+                    $qtyByProduct[$sku] = ($qtyByProduct[$sku] ?? 0) + $it['qty'];
+                    $qtyByMonthProduct[$mk][$sku] = ($qtyByMonthProduct[$mk][$sku] ?? 0) + $it['qty'];
+                }
+            }
+
+            $qtyMismatch = [];
             foreach ($sheetTotals as $m => $vals) {
                 foreach ($vals as $sku => $sheetQty) {
                     $calcQty = (int) ($qtyByMonthProduct[$m][$sku] ?? 0);
@@ -552,6 +618,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             . ': transaksi ' . angka($calcQty) . ' vs sheet ' . angka((int) $sheetQty);
                     }
                 }
+            }
+            if ($adjustLog) {
+                $warnings[] = count($adjustLog) . ' QTT disesuaikan ke angka ringkasan sheet: '
+                    . implode(' · ', array_slice($adjustLog, 0, 8))
+                    . (count($adjustLog) > 8 ? ' …' : '');
             }
 
             if ($headerIndex === null) {
@@ -575,6 +646,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'rows' => $rows, 'skipped' => $skipped, 'warnings' => $warnings,
                     'qty_by_product' => $qtyByProduct, 'qty_by_month' => $qtyByMonthProduct,
                     'sheet_totals' => $sheetTotals, 'qty_mismatch' => $qtyMismatch,
+                    'qty_adjustments' => $adjustLog ?? [],
                     'month_count' => $monthCount,
                     'detected_year' => $detectedYear,
                     'default_year' => $defaultYear, 'column_map' => $colMap,
@@ -752,6 +824,9 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
             <?php if (!empty($preview['qty_mismatch'])): ?>
                 <div class="alert alert-warning small py-2"><b>Selisih QTT vs ringkasan sheet (<?= count($preview['qty_mismatch']) ?>):</b><br><?= e(implode(' · ', array_slice($preview['qty_mismatch'], 0, 12))) ?><?= count($preview['qty_mismatch']) > 12 ? ' …' : '' ?></div>
+            <?php endif; ?>
+            <?php if (!empty($preview['qty_adjustments'])): ?>
+                <div class="alert alert-success small py-2"><b>QTT disesuaikan ke ringkasan sheet (<?= count($preview['qty_adjustments']) ?>):</b><br><?= e(implode(' · ', array_slice($preview['qty_adjustments'], 0, 12))) ?><?= count($preview['qty_adjustments']) > 12 ? ' …' : '' ?></div>
             <?php endif; ?>
         <?php endif; ?>
         <?php if (!empty($preview['month_count'])):
