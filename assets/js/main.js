@@ -83,4 +83,27 @@ document.addEventListener('DOMContentLoaded', function () {
             if (toEl) toEl.value = fmt(today);
         });
     });
+
+    // Mode gelap / terang — tersimpan di browser, berlaku semua halaman
+    function syncThemeButtons() {
+        var theme = document.documentElement.getAttribute('data-theme') || 'light';
+        document.querySelectorAll('.theme-toggle').forEach(function (btn) {
+            btn.innerHTML = theme === 'dark'
+                ? '<i class="bi bi-sun"></i>'
+                : '<i class="bi bi-moon-stars"></i>';
+            btn.setAttribute('aria-label', theme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap');
+            btn.title = theme === 'dark' ? 'Mode terang' : 'Mode gelap';
+        });
+        var label = document.getElementById('themeLabel');
+        if (label) label.textContent = theme === 'dark' ? 'Gelap' : 'Terang';
+    }
+    document.querySelectorAll('.theme-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            try { localStorage.setItem('bumk-theme', next); } catch (e) {}
+            syncThemeButtons();
+        });
+    });
+    syncThemeButtons();
 });

@@ -44,7 +44,7 @@ function require_password_change(): void
     $user = current_user();
     if (!$user || empty($user['must_change_password'])) return;
     if (str_contains((string) ($_SERVER['PHP_SELF'] ?? ''), 'ganti_password.php')) return;
-    redirect('/modules/auth/ganti_password.php');
+    redirect('/modules/pengaturan/ganti_password.php');
 }
 
 function require_role(array $roles): void

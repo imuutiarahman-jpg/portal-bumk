@@ -46,9 +46,18 @@ $unitMenus = [
     <meta name="description" content="Portal Sistem Informasi Unit Usaha Badan Usaha Milik Kampus Universitas Muhammadiyah Gorontalo.">
     <meta name="theme-color" content="#0B4F3E">
     <link rel="icon" type="image/png" href="<?= base_url('/logo/images.png') ?>">
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('bumk-theme');
+                if (t !== 'light' && t !== 'dark') t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', t);
+            } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+        })();
+    </script>
     <link href="<?= base_url('/assets/vendor/bootstrap/bootstrap.min.css') ?>?v=1" rel="stylesheet" onerror="this.href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css'">
     <link href="<?= base_url('/assets/vendor/bootstrap-icons/bootstrap-icons.min.css') ?>?v=1" rel="stylesheet">
-    <link href="<?= base_url('/assets/css/style.css') ?>?v=7" rel="stylesheet">
+    <link href="<?= base_url('/assets/css/style.css') ?>?v=9" rel="stylesheet">
     <script src="<?= base_url('/assets/vendor/bootstrap/bootstrap.bundle.min.js') ?>?v=2"></script>
     <script>window.bootstrap || document.write('<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"><\/script>');</script>
     <script src="<?= base_url('/assets/vendor/chartjs/chart.umd.min.js') ?>?v=1"></script>
@@ -67,6 +76,7 @@ $unitMenus = [
             <span class="portal-title ms-1 d-none d-lg-block">Portal Sistem Informasi Unit Usaha BUMK UMGO<small>Terintegrasi · Qmas · SM Corner · Daqam</small></span>
         </a>
         <nav class="header-nav d-flex align-items-center" aria-label="Navigasi utama">
+            <button type="button" class="btn btn-sm btn-outline-secondary theme-toggle" id="themeToggle" aria-label="Ganti mode tampilan" title="Ganti mode gelap/terang"><i class="bi bi-moon-stars"></i></button>
             <a class="btn btn-sm btn-outline-secondary" href="<?= base_url('/modules/portal/index.php') ?>" <?= str_contains($_SERVER['PHP_SELF'], '/portal/') ? 'aria-current="page"' : '' ?>><i class="bi bi-house-door"></i> <span class="d-none d-sm-inline">Beranda</span></a>
             <?php if ($user): ?>
                 <?php if ($user['role'] === 'super_admin'): ?>
@@ -113,11 +123,15 @@ $unitMenus = [
                 <?php endforeach; ?>
             <?php endif; ?>
 
-            <div class="sidebar-label mt-4">AKUN</div>
+            <div class="sidebar-label mt-4">PENGATURAN</div>
+            <a href="<?= base_url('/modules/pengaturan/index.php') ?>" class="sidebar-link <?= str_contains($_SERVER['PHP_SELF'], '/pengaturan/index.php') ? 'active' : '' ?>"><i class="bi bi-sliders2"></i> Pengaturan Umum</a>
             <?php if ($user['role'] === 'super_admin'): ?>
-                <a href="<?= base_url('/modules/superadmin/users.php') ?>" class="sidebar-link <?= $currentFile === 'users.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Kelola Akun</a>
+                <a href="<?= base_url('/modules/pengaturan/akun.php') ?>" class="sidebar-link <?= $currentFile === 'akun.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Kelola Akun</a>
             <?php endif; ?>
-            <a href="<?= base_url('/modules/auth/ganti_password.php') ?>" class="sidebar-link <?= $currentFile === 'ganti_password.php' ? 'active' : '' ?>"><i class="bi bi-key"></i> Ganti Password</a>
+            <?php if ($user['role'] === 'super_admin' || ($user['unit_code'] ?? '') === 'qmas'): ?>
+                <a href="<?= base_url('/modules/pengaturan/hapus_data.php') ?>" class="sidebar-link <?= $currentFile === 'hapus_data.php' ? 'active' : '' ?>"><i class="bi bi-trash3"></i> Hapus Data</a>
+            <?php endif; ?>
+            <a href="<?= base_url('/modules/pengaturan/ganti_password.php') ?>" class="sidebar-link <?= $currentFile === 'ganti_password.php' ? 'active' : '' ?>"><i class="bi bi-key"></i> Ganti Password</a>
             <a href="<?= base_url('/modules/auth/logout.php') ?>" class="sidebar-link text-danger"><i class="bi bi-box-arrow-left"></i> Keluar</a>
         </aside>
         <main class="col-md-10 col-lg-10 p-4 app-main" id="mainContent" tabindex="-1">

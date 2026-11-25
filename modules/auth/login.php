@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($ok) {
         if (!empty(current_user()['must_change_password'])) {
             flash_set('warning', 'Silakan ganti password terlebih dahulu.');
-            redirect('/modules/auth/ganti_password.php');
+            redirect('/modules/pengaturan/ganti_password.php');
         }
         $next = (string) ($_POST['next'] ?? '');
         if ($next !== '' && str_starts_with($next, BASE_URL)) {
