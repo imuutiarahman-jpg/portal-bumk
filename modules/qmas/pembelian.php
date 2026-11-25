@@ -9,6 +9,32 @@ $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
+
+    if (($_POST['action'] ?? '') === 'hapus') {
+        $id = (int) ($_POST['id'] ?? 0);
+        $typed = clean($_POST['confirm_no'] ?? '');
+        $p = $id > 0 ? row('SELECT * FROM qmas_purchases WHERE id=?', [$id]) : null;
+        if (!$p) {
+            flash_set('danger', 'Nota pembelian tidak ditemukan.');
+        } elseif ($typed !== (string) $p['purchase_no']) {
+            flash_set('danger', 'Nomor nota yang diketik tidak sesuai. Hapus dibatalkan.');
+        } else {
+            $pdo = db();
+            $pdo->beginTransaction();
+            try {
+                run('DELETE FROM qmas_purchases WHERE id=?', [$id]);
+                qmas_recalc_stock();
+                $pdo->commit();
+                activity('qmas', 'Hapus nota pembelian ' . $p['purchase_no'] . ' (' . rupiah($p['total_amount']) . ')');
+                flash_set('success', 'Nota ' . $p['purchase_no'] . ' dihapus. Stok dihitung ulang; HPP tidak diubah.');
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                flash_set('danger', 'Gagal menghapus nota: ' . $e->getMessage());
+            }
+        }
+        redirect('/modules/qmas/pembelian.php');
+    }
+
     $supplier = clean($_POST['supplier_name'] ?? '');
     $invoice  = clean($_POST['invoice_no'] ?? '');
     $notes    = clean($_POST['notes'] ?? '');
@@ -165,13 +191,49 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td class="small"><?= e($p['supplier_name']) ?></td>
                         <td class="text-end fw-semibold"><?= rupiah($p['total_amount']) ?></td>
                         <td><span class="badge bg-<?= payment_badge($p['payment_status']) ?>"><?= e(payment_label($p['payment_status'], $p['bank'])) ?></span></td>
-                        <td><a href="<?= base_url('/modules/qmas/pembelian.php?detail='.$p['id']) ?>" class="btn btn-sm btn-outline-primary py-0">Detail</a></td>
+                        <td class="text-nowrap">
+                            <a href="<?= base_url('/modules/qmas/pembelian.php?detail='.$p['id']) ?>" class="btn btn-sm btn-outline-primary py-0">Detail</a>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 btn-hapus-nota"
+                                data-id="<?= $p['id'] ?>"
+                                data-no="<?= e($p['purchase_no']) ?>"
+                                data-total="<?= e(rupiah($p['total_amount'])) ?>"
+                                aria-label="Hapus nota <?= e($p['purchase_no']) ?>">Hapus</button>
+                        </td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
             </table></div>
         </div>
     </div>
+</div>
+
+<div class="modal fade" id="hapusNotaModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="post">
+            <?php csrf_field(); ?>
+            <input type="hidden" name="action" value="hapus">
+            <input type="hidden" name="id" id="hapusNotaId">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger"><i class="bi bi-trash3"></i> Hapus Nota Pembelian</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle-fill me-1"></i> Nota akan dihapus permanen. Stok dihitung ulang, HPP tidak diubah.</div>
+                <table class="table table-sm mb-3"><tbody>
+                    <tr><th class="w-35">No. Nota</th><td id="notaInfo" class="fw-semibold"></td></tr>
+                    <tr><th>Total</th><td id="notaTotal"></td></tr>
+                </tbody></table>
+                <div class="mb-0">
+                    <label class="form-label" for="confirmNotaText">Ketik nomor nota <b id="notaInfoText" class="text-danger"></b> untuk konfirmasi</label>
+                    <input type="text" id="confirmNotaText" name="confirm_no" class="form-control" placeholder="No. nota" autocomplete="off" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-sm btn-danger fw-bold" id="hapusNotaSubmit" disabled><i class="bi bi-trash3"></i> Hapus Permanen</button>
+            </div>
+        </form>
+    </div></div>
 </div>
 
 <script>
@@ -202,6 +264,26 @@ document.addEventListener('DOMContentLoaded', function () {
             price.value = e.target.options[e.target.selectedIndex].dataset.cost || 0;
         }
     });
+
+    if (typeof bootstrap !== 'undefined') {
+        var notaModal = new bootstrap.Modal(document.getElementById('hapusNotaModal'));
+        var confirmNota = document.getElementById('confirmNotaText');
+        document.querySelectorAll('.btn-hapus-nota').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                document.getElementById('hapusNotaId').value = btn.dataset.id;
+                document.getElementById('notaInfo').textContent = btn.dataset.no;
+                document.getElementById('notaInfoText').textContent = btn.dataset.no;
+                document.getElementById('notaTotal').textContent = btn.dataset.total;
+                confirmNota.value = '';
+                document.getElementById('hapusNotaSubmit').disabled = true;
+                notaModal.show();
+            });
+        });
+        confirmNota.addEventListener('input', function () {
+            document.getElementById('hapusNotaSubmit').disabled =
+                this.value.trim() !== document.getElementById('notaInfoText').textContent.trim();
+        });
+    }
 });
 </script>
 
