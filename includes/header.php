@@ -14,9 +14,10 @@ $unitMenus = [
         'transaksi.php'  => 'Transaksi & Distribusi',
         'stok.php'       => 'Stok & Galon',
         'pembelian.php'  => 'Pembelian / Stok Masuk',
-        'laporan.php'    => 'Laporan Keuangan',
-        'rekap.php'      => 'Rekap Bulanan',
-        'import.php'     => 'Import CSV',
+        'laporan.php'       => 'Laporan Keuangan',
+        'rekap.php'         => 'Rekap Bulanan',
+        'import.php'        => 'Import Transaksi CSV',
+        'import_pembelian.php' => 'Import Stok Masuk',
     ],
     'smcorner' => [
         'dashboard.php' => 'Dashboard',

@@ -41,6 +41,7 @@ Buka phpMyAdmin hosting → pilih database → tab **Import**.
 6. `sql/update_smcorner_lengkap.sql`
 7. `sql/update_sm_import_katalog.sql`
 8. `sql/update_keamanan_akun.sql`
+9. `sql/update_qmas_opening_stock_date.sql` (stok awal bertanggal; lewati jika kolom sudah ada)
 
 > Catatan: nomor 4 dan 6 memakai `CREATE PROCEDURE`. Jika user hosting tidak boleh membuat routine, gunakan `sql/migrasi_tanpa_prosedur.sql` (jalankan hanya baris untuk kolom yang belum ada).
 

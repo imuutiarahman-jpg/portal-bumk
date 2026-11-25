@@ -14,6 +14,7 @@ Unit usaha: **Qmas Air Mineral**, **Suara Muhammadiyah (SM) Corner**, **Daqam Ca
 3. Klik tab **Import** → pilih file `sql/bumk_umgo.sql` → klik **Go**.
    (File ini otomatis membuat database `bumk_umgo`, tabel, dan data contoh.)
    > Jika database sudah terisi dari versi sebelumnya, import juga `sql/update_payment_status.sql` (cukup sekali). Script ini mengubah status `lunas` lama menjadi `tunai` dan menambah kolom `bank`, tanpa menghapus data.
+   > Untuk data yang sudah memakai `opening_stock`, jalankan juga `sql/update_qmas_opening_stock_date.sql` (cukup sekali). Script ini menambah kolom `opening_stock_date`, mengisi stok awal penyeimbang, lalu menghitung ulang stok.
 4. Pastikan folder ini berada di `C:\xampp\htdocs\portal-bumk`.
 5. Buka di browser: **http://localhost/portal-bumk/**
 
@@ -69,7 +70,8 @@ Portal Utama (landing: header 80px, hero 280px, 3 kartu unit, footer 70px)
 ### Qmas Air Mineral
 - KPI: omzet hari ini, galon terjual, dus terjual, sisa stok gudang
 - Transaksi & distribusi: input penjualan multi-item, jenis pelanggan (fakultas/mahasiswa/umum), serta **Hapus transaksi** yang salah input (konfirmasi dengan mengetik nomor transaksi; stok otomatis dihitung ulang)
-- **Stok dihitung menurut tanggal**: `stok = stok awal + pembelian s.d. hari ini − penjualan s.d. hari ini` (transaksi hasil import **juga** mengurangi stok). Pembelian backdated hanya memengaruhi transaksi setelah tanggalnya. Tombol **Hitung Ulang Stok** di halaman Stok & Galon dipakai untuk menyinkronkan data lama setelah perubahan aturan.
+- **Stok dihitung menurut tanggal**: `stok = opening_stock + pembelian/penjualan dengan tanggal > opening_stock_date (s.d. hari ini)`; transaksi hasil import **juga** mengurangi stok. Data sebelum tanggal stok awal tidak dikurangi dua kali. Pembelian backdated hanya memengaruhi transaksi setelah tanggalnya. Tombol **Hitung Ulang Stok** di **Stok & Galon** dipakai untuk sinkronisasi.
+- **Import Stok Masuk** (`Import Stok Masuk`): tarik kolom **TANGGAL + Stok Masuk** dari tab *Kartu Kontrol Stok* Qmas (link/paste/CSV) menjadi nota pembelian bertanggal. Mode timpa batch `KARTU-STOK-2026` mencegah dobel. Harga nota memakai HPP produk yang berlaku agar laporan laba tidak berubah. Untuk data 2026, `opening_stock` dipakai sebagai angka penyeimbang selisih antara orderan yang diinput di aplikasi dengan kolom `Stok Keluar` kartu; lihat `sql/update_qmas_opening_stock_date.sql`.
 - **Hapus Data per Bulan**: pilih periode `YYYY-MM`, konfirmasi dengan mengetik periode tersebut; menghapus seluruh transaksi & pembelian bulan itu dan menyetel stok semua produk Qmas menjadi 0 (cocok untuk mengosongkan data Qmas)
 - Status bayar: **Tunai / Transfer / Piutang**. Saat memilih **Transfer**, muncul pilihan bank **BSI** atau **Muamalat** (wajib). Piutang bisa dilunasi lewat form pilihan metode + bank.
 - Stok kemasan (GL 19L, 240ml, 330ml, 600ml, 1.5L) + pencatatan tukar galon kosong + HPP per produk
@@ -113,7 +115,7 @@ portal-bumk/
 │   ├── auth/        login, logout
 │   ├── portal/      landing
 │   ├── superadmin/  dashboard omzet gabungan
-│   ├── qmas/        dashboard, transaksi, stok, pembelian, laporan, rekap, import
+│   ├── qmas/        dashboard, transaksi, stok, pembelian, laporan, rekap, import, import_pembelian
 │   ├── smcorner/    dashboard, produk, pembelian, kasir, laporan, rekap
 │   └── daqam/       dashboard, kasir, menu, bahanbaku, shift, laporan
 ├── contoh/contoh_import_qmas.csv   # template CSV contoh
@@ -125,6 +127,7 @@ portal-bumk/
     ├── update_qmas_produk_aktif.sql  # kolom is_active (soft delete produk)
     ├── reactivate_qmas_products.sql
     ├── update_qmas_pembelian.sql    # tabel pembelian / stok masuk (Qmas)
+    ├── update_qmas_opening_stock_date.sql  # tanggal stok awal + angka penyeimbang
     └── update_smcorner_lengkap.sql  # HPP + pembelian SM Corner
 ```
 

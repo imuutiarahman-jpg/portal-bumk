@@ -82,6 +82,8 @@ CREATE TABLE `qmas_products` (
     `price` DECIMAL(12,2) NOT NULL DEFAULT 0,
     `cost` DECIMAL(12,2) NOT NULL DEFAULT 0,
     `stock` INT NOT NULL DEFAULT 0,
+    `opening_stock` INT NOT NULL DEFAULT 0,
+    `opening_stock_date` DATETIME NULL,
     `min_stock` INT NOT NULL DEFAULT 0,
     `unit` VARCHAR(15) NOT NULL DEFAULT 'pcs',
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
