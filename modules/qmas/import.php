@@ -268,12 +268,37 @@ $productCols = [
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
+    $isPaste = false;
+    $pasteMonth = '';
 
-    if ($action === 'preview') {
-        $sheetUrl = trim((string) ($_POST['sheet_url'] ?? ''));
-        $sourcePath = null; $sourceName = ''; $tempFile = null;
+    // Mode tempel langsung dari Google Sheets (tab sebagai pemisah).
+    if ($action === 'preview_paste') {
+        $isPaste = true;
+        $pasteMonth = trim((string) ($_POST['bulan_paste'] ?? ''));
+        $pasteData = (string) ($_POST['paste_data'] ?? '');
+        if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $pasteMonth)) {
+            $errors[] = 'Bulan tidak valid. Pilih periode YYYY-MM.';
+        } elseif (trim($pasteData) === '') {
+            $errors[] = 'Tempel data dari Google Sheets terlebih dahulu.';
+        } else {
+            $tempFile = tempnam(sys_get_temp_dir(), 'qmas_paste_');
+            file_put_contents($tempFile, $pasteData);
+            $sourcePath = $tempFile;
+            $sourceName = 'paste-' . $pasteMonth;
+            $_POST['default_year'] = substr($pasteMonth, 0, 4);
+            $_POST['batch_mode'] = 'replace';
+        }
+    }
 
-        if ($sheetUrl !== '') {
+    if ($action === 'preview' || $action === 'preview_paste') {
+        $sheetUrl = $isPaste ? '' : trim((string) ($_POST['sheet_url'] ?? ''));
+        $sourcePath = $isPaste ? ($sourcePath ?? null) : null;
+        $sourceName = $isPaste ? ($sourceName ?? '') : '';
+        $tempFile = $isPaste ? ($tempFile ?? null) : null;
+
+        if ($isPaste) {
+            // sumber sudah disiapkan dari textarea
+        } elseif ($sheetUrl !== '') {
             [$exportUrl, $sourceName, $urlError] = imp_sheet_export_url($sheetUrl);
             if ($urlError) {
                 $errors[] = $urlError;
@@ -538,6 +563,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             fclose($handle);
 
+            // Mode tempel: hanya pakai baris pada bulan yang dipilih.
+            if ($isPaste && $pasteMonth) {
+                $before = count($rows);
+                $rows = array_values(array_filter($rows, function ($r) use ($pasteMonth) {
+                    return date('Y-m', strtotime($r['date'])) === $pasteMonth;
+                }));
+                $selisihBulan = $before - count($rows);
+                if ($selisihBulan > 0) {
+                    $warnings[] = $selisihBulan . ' baris di luar bulan ' . $pasteMonth . ' dilewati.';
+                }
+            }
+
             $skuLabels = [
                 'QMS-G19' => 'GL19', 'QMS-240' => '240 ML', 'QMS-G22' => '240 ML',
                 'QMS-330' => '330 ML', 'QMS-B60' => '600 ML', 'QMS-B15' => '1.5L',
@@ -551,6 +588,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $mk = date('Y-m', strtotime($r['date']));
                 $rowsByMonth[$mk][] = $idx;
             }
+            if (!$isPaste) {
             foreach ($sheetTotals as $m => $targets) {
                 foreach ($targets as $sku => $sheetQty) {
                     $target = (int) $sheetQty;
@@ -584,6 +622,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $adjustLog[] = date('M Y', strtotime($m . '-01')) . ' · '
                         . ($skuLabels[$sku] ?? $sku) . ': ' . angka($current) . ' → ' . angka($target);
                 }
+            }
             }
 
             // Hitung ulang subtotal & total transaksi setelah qty disesuaikan.
@@ -645,10 +684,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'batch' => $batch, 'batch_mode' => $batchMode, 'filename' => $sourceName,
                     'rows' => $rows, 'skipped' => $skipped, 'warnings' => $warnings,
                     'qty_by_product' => $qtyByProduct, 'qty_by_month' => $qtyByMonthProduct,
-                    'sheet_totals' => $sheetTotals, 'qty_mismatch' => $qtyMismatch,
-                    'qty_adjustments' => $adjustLog ?? [],
+                    'sheet_totals' => $isPaste ? [] : $sheetTotals,
+                    'qty_mismatch' => $isPaste ? [] : $qtyMismatch,
+                    'qty_adjustments' => $isPaste ? [] : ($adjustLog ?? []),
                     'month_count' => $monthCount,
                     'detected_year' => $detectedYear,
+                    'is_paste' => $isPaste,
                     'default_year' => $defaultYear, 'column_map' => $colMap,
                 ];
                 $preview = $_SESSION['qmas_import'];
@@ -789,7 +830,7 @@ require_once __DIR__ . '/../../includes/header.php';
             $byMonth = $preview['qty_by_month'];
             ksort($byMonth);
         ?>
-            <div class="alert alert-light small py-2 mb-2"><b>QTT per bulan</b> dihitung dari baris transaksi. Bandingkan dengan baris <code>TOTAL PRODUK TERJUAL</code> di sheet.</div>
+            <div class="alert alert-light small py-2 mb-2"><b>QTT per bulan</b> <?php if (!empty($preview['is_paste'])): ?>dari data yang ditempel — dipakai persis tanpa penyesuaian.<?php else: ?>dihitung dari baris transaksi. Bandingkan dengan baris <code>TOTAL PRODUK TERJUAL</code> di sheet.<?php endif; ?></div>
             <div class="table-responsive mb-3">
                 <table class="table table-sm mb-0">
                     <thead class="table-light"><tr><th>Bulan</th><?php foreach ($skus as $sku): ?><th class="text-end"><?= e($qtyLabels[$sku] ?? $sku) ?></th><?php endforeach; ?><th>Cocok</th></tr></thead>
@@ -869,6 +910,28 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 <?php else: ?>
+<div class="card content-card mb-3">
+    <div class="card-header"><i class="bi bi-clipboard text-success"></i> Tempel Data dari Google Sheets per Bulan</div>
+    <div class="card-body">
+        <form method="post">
+            <?php csrf_field(); ?>
+            <input type="hidden" name="action" value="preview_paste">
+            <div class="row g-2 mb-2">
+                <div class="col-sm-4">
+                    <label class="form-label small fw-semibold" for="bulanPaste">Bulan</label>
+                    <input type="month" id="bulanPaste" name="bulan_paste" class="form-control" value="<?= date('Y-m') ?>" required>
+                </div>
+                <div class="col-sm-8">
+                    <label class="form-label small fw-semibold" for="pasteData">Salin cell dari Sheets (beserta header)</label>
+                    <textarea id="pasteData" name="paste_data" class="form-control" rows="6" placeholder="TANGGAL &lt;tab&gt; NAMA PELANGGAN ..." required></textarea>
+                </div>
+            </div>
+            <div class="form-text small mb-2">Salin blok lengkap mulai baris <b>TANGGAL / NAMA PELANGGAN</b>, sub-header <b>QTT / PRICE</b>, sampai baris transaksi bulan yang dipilih. QTT dipakai <b>persis seperti yang ditempel</b>; batch akan <b>timpa</b> data bulan yang sama.</div>
+            <button class="btn btn-outline-primary"><i class="bi bi-eye"></i> Pratinjau Data Ditempel</button>
+        </form>
+    </div>
+</div>
+
 <div class="row g-3">
     <div class="col-lg-7">
         <div class="card content-card">
