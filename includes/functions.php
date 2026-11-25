@@ -73,6 +73,28 @@ function last_id(): int
     return (int) db()->lastInsertId();
 }
 
+/**
+ * Hitung ulang stok Qmas dari stok awal + pembelian - transaksi manual.
+ * Transaksi hasil import (import_batch IS NOT NULL) tidak mengurangi stok.
+ */
+function qmas_recalc_stock(): void
+{
+    run('UPDATE `qmas_products` p
+         SET `stock` = GREATEST(0,
+             p.`opening_stock`
+             + COALESCE((
+                 SELECT SUM(i.`quantity`) FROM `qmas_purchase_items` i
+                 JOIN `qmas_purchases` pu ON pu.`id` = i.`purchase_id`
+                 WHERE i.`product_id` = p.`id`
+             ), 0)
+             - COALESCE((
+                 SELECT SUM(i.`quantity`) FROM `qmas_transaction_items` i
+                 JOIN `qmas_transactions` t ON t.`id` = i.`transaction_id`
+                 WHERE i.`product_id` = p.`id` AND t.`import_batch` IS NULL
+             ), 0)
+         )');
+}
+
 function unit_by_code(string $code): ?array
 {
     static $cache = [];

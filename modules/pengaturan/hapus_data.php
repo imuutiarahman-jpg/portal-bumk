@@ -33,7 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 run('DELETE FROM qmas_transactions WHERE DATE_FORMAT(transaction_date,"%Y-%m")=?', [$bulan]);
                 run('DELETE FROM qmas_purchases WHERE DATE_FORMAT(purchase_date,"%Y-%m")=?', [$bulan]);
-                run('UPDATE qmas_products SET stock=0');
+                run('UPDATE qmas_products SET opening_stock=0');
+                qmas_recalc_stock();
                 $pdo->commit();
 
                 activity('qmas', sprintf(
@@ -68,7 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 run('DELETE FROM qmas_transactions WHERE YEAR(transaction_date)=?', [$tahun]);
                 run('DELETE FROM qmas_purchases WHERE YEAR(purchase_date)=?', [$tahun]);
-                run('UPDATE qmas_products SET stock=0');
+                run('UPDATE qmas_products SET opening_stock=0');
+                qmas_recalc_stock();
                 $pdo->commit();
 
                 activity('qmas', sprintf(

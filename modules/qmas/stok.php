@@ -93,7 +93,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'setstock') {
-        run('UPDATE qmas_products SET stock=? WHERE id=?', [max(0, (int) ($_POST['stock'] ?? 0)), (int) $_POST['id']]);
+        $sid = (int) ($_POST['id'] ?? 0);
+        $newStock = max(0, (int) ($_POST['stock'] ?? 0));
+        $currentStock = (int) val('SELECT stock FROM qmas_products WHERE id=?', [$sid]);
+        run('UPDATE qmas_products SET opening_stock = opening_stock + ? WHERE id=?',
+            [$newStock - $currentStock, $sid]);
+        qmas_recalc_stock();
         flash_set('success', 'Stok diperbarui.');
         redirect('/modules/qmas/stok.php');
     }

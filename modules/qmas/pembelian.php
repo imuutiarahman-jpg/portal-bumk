@@ -57,9 +57,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($items as $it) {
                 run('INSERT INTO qmas_purchase_items (purchase_id,product_id,quantity,unit_price,subtotal) VALUES (?,?,?,?,?)',
                     [$purchaseId, $it['product']['id'], $it['qty'], $it['price'], $it['subtotal']]);
-                run('UPDATE qmas_products SET stock = stock + ?, cost = ? WHERE id=?',
-                    [$it['qty'], $it['price'], $it['product']['id']]);
+                run('UPDATE qmas_products SET cost = ? WHERE id=?',
+                    [$it['price'], $it['product']['id']]);
             }
+            qmas_recalc_stock();
             $pdo->commit();
             activity('qmas', 'Pembelian ' . $no . ' (' . rupiah($total) . ') dari ' . $supplier);
             flash_set('success', 'Pembelian ' . $no . ' berhasil. Stok & HPP diperbarui.');

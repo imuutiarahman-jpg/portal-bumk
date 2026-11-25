@@ -42,20 +42,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = db();
             $pdo->beginTransaction();
             try {
-                $items = all('SELECT product_id, quantity FROM qmas_transaction_items WHERE transaction_id=?', [$id]);
                 $isManual = empty($t['import_batch']);
-
-                // Transaksi manual mengurangi stok saat disimpan → kembalikan saat dihapus.
-                // Transaksi hasil import tidak pernah mengurangi stok, jadi tidak dikembalikan.
-                if ($isManual) {
-                    foreach ($items as $it) {
-                        run('UPDATE qmas_products SET stock = stock + ? WHERE id=?',
-                            [(int) $it['quantity'], (int) $it['product_id']]);
-                    }
-                }
 
                 // Item ikut terhapus otomatis (ON DELETE CASCADE).
                 run('DELETE FROM qmas_transactions WHERE id=?', [$id]);
+                qmas_recalc_stock();
                 $pdo->commit();
 
                 activity('qmas', 'Hapus transaksi ' . $t['transaction_no']
@@ -117,8 +108,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 foreach ($items as $it) {
                     run('INSERT INTO qmas_transaction_items (transaction_id,product_id,quantity,unit_price,subtotal) VALUES (?,?,?,?,?)',
                         [$trxId, $it['product']['id'], $it['qty'], $it['product']['price'], $it['subtotal']]);
-                    run('UPDATE qmas_products SET stock = stock - ? WHERE id=?', [$it['qty'], $it['product']['id']]);
                 }
+                qmas_recalc_stock();
                 $pdo->commit();
                 activity('qmas', 'Transaksi baru ' . $no . ' (' . rupiah($total) . ' via ' . payment_label($status, $bank) . ')');
                 flash_set('success', 'Transaksi ' . $no . ' berhasil disimpan.');
