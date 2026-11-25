@@ -8,6 +8,10 @@ $activeUnit = 'qmas';
 $errors = [];
 $preview = null;
 
+// Naikkan nilai ini setiap kali aturan parsing/penyimpanan diubah.
+// Session pratinjau lama otomatis ditolak supaya tidak mengimport data versi lama.
+define('IMPORTRULE_VERSION', '2026-11-25-bank-total-v1');
+
 /* ---------- Parser helpers ---------- */
 function imp_money(string $s): float
 {
@@ -375,7 +379,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'JANUARI' => 1, 'FEBRUARI' => 2, 'MARET' => 3, 'APRIL' => 4, 'MEI' => 5, 'JUNI' => 6,
                 'JULI' => 7, 'AGUSTUS' => 8, 'SEPTEMBER' => 9, 'OKTOBER' => 10, 'NOVEMBER' => 11, 'DESEMBER' => 12,
             ];
-            $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = '';
+            $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = ''; $lastNama = '';
             $headerCols = []; $labelRows = []; $colMap = null;
 
             // Tempel tanpa baris header: pakai urutan kolom tetap dari sheet yang disalin.
@@ -484,13 +488,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 // Baris sub-header (QTT, PRICE, HPP, LABA/RUGI) bukan transaksi
                 if (str_contains(strtoupper($joined), 'QTT') && str_contains(strtoupper($joined), 'PRICE')) continue;
-                if ($get(0) === '' && $get(1) === '') continue;
 
                 $dateRaw = $field('tanggal', 0);
                 if ($dateRaw !== '') $lastDateRaw = $dateRaw;
                 $date = imp_date($lastDateRaw, $defaultYear);
                 $nama = $field('nama', 1);
-                if ($nama === '') continue;
+                if ($nama === '') {
+                    // Baris lanjutan pada sheet sering kosong nama pelanggan → pakai nama sebelumnya.
+                    $nama = $lastNama;
+                }
+                if ($nama === '') { $nama = '(tanpa nama)'; }
+                $lastNama = $nama;
                 if (!$date) { $skipped[] = "Baris $lineNo: tanggal '$lastDateRaw' tidak dikenali"; continue; }
 
                 $bankAmount = imp_money($field('bank', 21));
@@ -709,6 +717,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'month_count' => $monthCount,
                     'detected_year' => $detectedYear,
                     'is_paste' => $isPaste,
+                    'version' => IMPORTRULE_VERSION,
                     'default_year' => $defaultYear, 'column_map' => $colMap,
                 ];
                 $preview = $_SESSION['qmas_import'];
@@ -730,6 +739,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = $_SESSION['qmas_import'] ?? null;
         if (!$data || empty($data['rows'])) {
             $errors[] = 'Tidak ada data pratinjau. Silakan upload ulang file CSV.';
+        } elseif (($data['version'] ?? '') !== IMPORTRULE_VERSION) {
+            $errors[] = 'Pratinjau berasal dari aturan lama. Klik <b>Batal</b>, lalu lakukan Pratinjau ulang sebelum Import.';
         } else {
             $pdo = db();
             $pdo->beginTransaction();
@@ -744,11 +755,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stamp = date('YmdHis') . '-' . substr(md5($batch), 0, 4);
                 foreach ($data['rows'] as $i => $r) {
                     $no = 'QMS-IMP-' . $stamp . '-' . str_pad((string) ($i + 1), 4, '0', STR_PAD_LEFT);
+                    // Total dihitung ulang dari uang yang diterima: BANK → CASH → TAGIHAN.
+                    if (!empty($r['bank_amount'])) {
+                        $amount = (float) $r['bank_amount'];
+                    } elseif (!empty($r['cash'])) {
+                        $amount = (float) $r['cash'];
+                    } elseif (!empty($r['tagihan'])) {
+                        $amount = (float) $r['tagihan'];
+                    } else {
+                        $amount = (float) ($r['payment_total'] ?? $r['total'] ?? 0);
+                    }
                     run('INSERT INTO qmas_transactions
                         (transaction_no,transaction_date,customer_name,customer_type,payment_status,bank,lunas_date,setor_date,total_amount,user_id,import_batch,created_at)
                         VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())', [
                         $no, $r['date'], $r['nama'], 'umum', $r['status'], $r['bank'],
-                        $r['lunas_date'], $r['setor_date'], $r['total'], current_user()['id'], $batch,
+                        $r['lunas_date'], $r['setor_date'], $amount, current_user()['id'], $batch,
                     ]);
                     $tid = last_id();
                     foreach ($r['items'] as $it) {
