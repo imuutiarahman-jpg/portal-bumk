@@ -68,7 +68,8 @@ Portal Utama (landing: header 80px, hero 280px, 3 kartu unit, footer 70px)
 
 ### Qmas Air Mineral
 - KPI: omzet hari ini, galon terjual, dus terjual, sisa stok gudang
-- Transaksi & distribusi: input penjualan multi-item, jenis pelanggan (fakultas/mahasiswa/umum), serta **Hapus transaksi** yang salah input (konfirmasi dengan mengetik nomor transaksi; stok transaksi manual otomatis dikembalikan, transaksi hasil import tidak mengubah stok)
+- Transaksi & distribusi: input penjualan multi-item, jenis pelanggan (fakultas/mahasiswa/umum), serta **Hapus transaksi** yang salah input (konfirmasi dengan mengetik nomor transaksi; stok otomatis dihitung ulang)
+- **Stok dihitung menurut tanggal**: `stok = stok awal + pembelian s.d. hari ini − penjualan s.d. hari ini` (transaksi hasil import **juga** mengurangi stok). Pembelian backdated hanya memengaruhi transaksi setelah tanggalnya. Tombol **Hitung Ulang Stok** di halaman Stok & Galon dipakai untuk menyinkronkan data lama setelah perubahan aturan.
 - **Hapus Data per Bulan**: pilih periode `YYYY-MM`, konfirmasi dengan mengetik periode tersebut; menghapus seluruh transaksi & pembelian bulan itu dan menyetel stok semua produk Qmas menjadi 0 (cocok untuk mengosongkan data Qmas)
 - Status bayar: **Tunai / Transfer / Piutang**. Saat memilih **Transfer**, muncul pilihan bank **BSI** atau **Muamalat** (wajib). Piutang bisa dilunasi lewat form pilihan metode + bank.
 - Stok kemasan (GL 19L, 240ml, 330ml, 600ml, 1.5L) + pencatatan tukar galon kosong + HPP per produk

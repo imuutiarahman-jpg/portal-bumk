@@ -782,6 +782,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
                 $pdo->commit();
+                qmas_recalc_stock();
                 activity('qmas', 'Import CSV: ' . $data['filename'] . ' (' . count($data['rows']) . ' transaksi)');
                 unset($_SESSION['qmas_import']);
                 flash_set('success', 'Import berhasil: ' . count($data['rows']) . ' transaksi dari ' . $data['filename'] . ' tersimpan.');

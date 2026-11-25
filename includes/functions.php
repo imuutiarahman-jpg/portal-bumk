@@ -74,8 +74,9 @@ function last_id(): int
 }
 
 /**
- * Hitung ulang stok Qmas dari stok awal + pembelian - transaksi manual.
- * Transaksi hasil import (import_batch IS NOT NULL) tidak mengurangi stok.
+ * Hitung ulang stok Qmas dari stok awal + pembelian - penjualan (termasuk hasil import).
+ * Baik pembelian maupun transaksi dibatasi hingga hari ini (<= NOW()),
+ * sehingga pembelian backdated hanya memengaruhi transaksi setelah tanggalnya.
  */
 function qmas_recalc_stock(): void
 {
@@ -85,12 +86,12 @@ function qmas_recalc_stock(): void
              + COALESCE((
                  SELECT SUM(i.`quantity`) FROM `qmas_purchase_items` i
                  JOIN `qmas_purchases` pu ON pu.`id` = i.`purchase_id`
-                 WHERE i.`product_id` = p.`id`
+                 WHERE i.`product_id` = p.`id` AND pu.`purchase_date` <= NOW()
              ), 0)
              - COALESCE((
                  SELECT SUM(i.`quantity`) FROM `qmas_transaction_items` i
                  JOIN `qmas_transactions` t ON t.`id` = i.`transaction_id`
-                 WHERE i.`product_id` = p.`id` AND t.`import_batch` IS NULL
+                 WHERE i.`product_id` = p.`id` AND t.`transaction_date` <= NOW()
              ), 0)
          )');
 }

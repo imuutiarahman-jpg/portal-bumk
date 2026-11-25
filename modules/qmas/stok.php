@@ -29,14 +29,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
 
+    if ($action === 'recalc') {
+        qmas_recalc_stock();
+        activity('qmas', 'Hitung ulang stok Qmas');
+        flash_set('success', 'Stok semua produk dihitung ulang dari stok awal, pembelian, dan transaksi menurut tanggalnya.');
+        redirect('/modules/qmas/stok.php');
+    }
+
     if ($action === 'tambah') {
         $f = stok_product_fields($_POST);
         $errs = [];
         if ($f['name'] === '' || $f['sku'] === '') $errs[] = 'Nama dan SKU wajib diisi.';
         if (!$errs) {
             try {
-                run('INSERT INTO qmas_products (name,sku,kind,size,price,cost,stock,min_stock,unit,is_active) VALUES (?,?,?,?,?,?,?,?,?,1)',
-                    [$f['name'], $f['sku'], $f['kind'], $f['size'], $f['price'], $f['cost'], $f['stock'], $f['min_stock'], $f['unit']]);
+                run('INSERT INTO qmas_products (name,sku,kind,size,price,cost,stock,opening_stock,min_stock,unit,is_active) VALUES (?,?,?,?,?,?,?,?,?,?,1)',
+                    [$f['name'], $f['sku'], $f['kind'], $f['size'], $f['price'], $f['cost'], $f['stock'], $f['stock'], $f['min_stock'], $f['unit']]);
                 activity('qmas', 'Tambah produk ' . $f['name']);
                 flash_set('success', 'Produk ' . $f['name'] . ' ditambahkan.');
             } catch (Throwable $e) { $errs[] = 'SKU sudah digunakan.'; }
@@ -57,8 +64,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if (!$errs) {
             try {
-                run('UPDATE qmas_products SET name=?,sku=?,kind=?,size=?,price=?,cost=?,stock=?,min_stock=?,unit=? WHERE id=?',
-                    [$f['name'], $f['sku'], $f['kind'], $f['size'], $f['price'], $f['cost'], $f['stock'], $f['min_stock'], $f['unit'], $id]);
+                $oldStock = (int) val('SELECT stock FROM qmas_products WHERE id=?', [$id]);
+                $delta = $f['stock'] - $oldStock;
+                run('UPDATE qmas_products SET name=?,sku=?,kind=?,size=?,price=?,cost=?,min_stock=?,unit=?,opening_stock=opening_stock+? WHERE id=?',
+                    [$f['name'], $f['sku'], $f['kind'], $f['size'], $f['price'], $f['cost'], $f['min_stock'], $f['unit'], $delta, $id]);
+                qmas_recalc_stock();
                 activity('qmas', 'Ubah produk #' . $id . ' (' . $f['name'] . ')');
                 flash_set('success', 'Produk ' . $f['name'] . ' diperbarui.');
             } catch (Throwable $e) { $errs[] = 'Gagal menyimpan: ' . $e->getMessage(); }
@@ -145,6 +155,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div><h1 class="section-title mb-1"><i class="bi bi-box-seam" style="color:var(--qmas)"></i> Manajemen Stok & Galon</h1><div class="text-muted small">Sisa stok gudang: <b><?= angka($totalStock) ?> unit</b></div></div>
+    <form method="post"><?php csrf_field(); ?><input type="hidden" name="action" value="recalc"><button class="btn btn-sm btn-outline-primary" title="Hitung ulang dari stok awal, pembelian, dan transaksi menurut tanggal"><i class="bi bi-arrow-repeat"></i> Hitung Ulang Stok</button></form>
 </div>
 
 <?php if ($errors): ?><div class="alert alert-danger"><?= e(implode('<br>', $errors)) ?></div><?php endif; ?>
