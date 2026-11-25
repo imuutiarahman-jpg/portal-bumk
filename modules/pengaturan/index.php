@@ -15,17 +15,6 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<ul class="nav nav-pills settings-tabs mb-3" role="tablist">
-    <li class="nav-item"><a class="nav-link active" href="<?= base_url('/modules/pengaturan/index.php') ?>"><i class="bi bi-sliders2"></i> Umum</a></li>
-    <?php if ($user['role'] === 'super_admin'): ?>
-        <li class="nav-item"><a class="nav-link" href="<?= base_url('/modules/pengaturan/akun.php') ?>"><i class="bi bi-people"></i> Akun</a></li>
-    <?php endif; ?>
-    <?php if ($user['role'] === 'super_admin' || ($user['unit_code'] ?? '') === 'qmas'): ?>
-        <li class="nav-item"><a class="nav-link" href="<?= base_url('/modules/pengaturan/hapus_data.php') ?>"><i class="bi bi-trash3"></i> Hapus Data</a></li>
-    <?php endif; ?>
-    <li class="nav-item"><a class="nav-link" href="<?= base_url('/modules/pengaturan/ganti_password.php') ?>"><i class="bi bi-key"></i> Ganti Password</a></li>
-</ul>
-
 <div class="row g-3">
     <?php if ($user['role'] === 'super_admin'): ?>
     <div class="col-md-6 col-xl-4">

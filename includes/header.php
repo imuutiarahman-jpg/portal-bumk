@@ -86,7 +86,6 @@ $unitMenus = [
                 <?php endif; ?>
                 <span class="badge bg-light text-dark border d-none d-md-inline-block"><?= e(role_label($user['role'])) ?></span>
                 <span class="user-pill d-none d-lg-inline-flex" title="<?= e($user['full_name']) ?>"><span class="user-avatar"><?= e($initials) ?></span><span class="text-truncate" style="max-width:130px"><?= e($user['full_name']) ?></span></span>
-                <a class="btn btn-sm btn-outline-danger" href="<?= base_url('/modules/auth/logout.php') ?>" aria-label="Keluar"><i class="bi bi-box-arrow-right"></i> <span class="d-none d-sm-inline">Keluar</span></a>
             <?php else: ?>
                 <a class="btn btn-sm btn-success" href="<?= base_url('/modules/auth/login.php') ?>"><i class="bi bi-shield-lock"></i> Login</a>
             <?php endif; ?>
@@ -124,15 +123,7 @@ $unitMenus = [
             <?php endif; ?>
 
             <div class="sidebar-label mt-4">PENGATURAN</div>
-            <a href="<?= base_url('/modules/pengaturan/index.php') ?>" class="sidebar-link <?= str_contains($_SERVER['PHP_SELF'], '/pengaturan/index.php') ? 'active' : '' ?>"><i class="bi bi-sliders2"></i> Pengaturan Umum</a>
-            <?php if ($user['role'] === 'super_admin'): ?>
-                <a href="<?= base_url('/modules/pengaturan/akun.php') ?>" class="sidebar-link <?= $currentFile === 'akun.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Kelola Akun</a>
-            <?php endif; ?>
-            <?php if ($user['role'] === 'super_admin' || ($user['unit_code'] ?? '') === 'qmas'): ?>
-                <a href="<?= base_url('/modules/pengaturan/hapus_data.php') ?>" class="sidebar-link <?= $currentFile === 'hapus_data.php' ? 'active' : '' ?>"><i class="bi bi-trash3"></i> Hapus Data</a>
-            <?php endif; ?>
-            <a href="<?= base_url('/modules/pengaturan/ganti_password.php') ?>" class="sidebar-link <?= $currentFile === 'ganti_password.php' ? 'active' : '' ?>"><i class="bi bi-key"></i> Ganti Password</a>
-            <a href="<?= base_url('/modules/auth/logout.php') ?>" class="sidebar-link text-danger"><i class="bi bi-box-arrow-left"></i> Keluar</a>
+            <a href="<?= base_url('/modules/pengaturan/index.php') ?>" class="sidebar-link <?= str_contains($_SERVER['PHP_SELF'], '/pengaturan/') ? 'active' : '' ?>"><i class="bi bi-sliders2"></i> Pengaturan</a>
         </aside>
         <main class="col-md-10 col-lg-10 p-4 app-main" id="mainContent" tabindex="-1">
             <?= flash_render() ?>
