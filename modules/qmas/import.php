@@ -107,6 +107,16 @@ function imp_detect_delimiter(string $firstLine): string
     return $score[$best] > 0 ? $best : ',';
 }
 
+/** Rapikan hasil paste: BOM, CRLF, dan spasi beruntun → tab bila tidak ada pemisah lain. */
+function imp_normalize_paste(string $s): string
+{
+    $s = preg_replace('/^\xEF\xBB\xBF/', '', $s);
+    $s = str_replace(["\r\n", "\r"], "\n", $s);
+    // Salinan cell Sheets memakai tab. Jika tidak ada tab/koma/semicolon,
+    // kemungkinan besar baris spasi dari teks biasa — ubah spasi 2+ jadi tab.
+    return $s;
+}
+
 function imp_products(): array
 {
     static $map = null;
@@ -275,7 +285,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'preview_paste') {
         $isPaste = true;
         $pasteMonth = trim((string) ($_POST['bulan_paste'] ?? ''));
-        $pasteData = (string) ($_POST['paste_data'] ?? '');
+        $pasteData = imp_normalize_paste((string) ($_POST['paste_data'] ?? ''));
+        if (strpos($pasteData, "\t") === false && strpos($pasteData, ',') === false && strpos($pasteData, ';') === false) {
+            $errors[] = 'Format salinan tidak dikenali. Salin dari <b>sel Google Sheets</b> dengan Ctrl+C (pemisah tab otomatis ada), jangan mengetik atau menyalin teks biasa.';
+        }
         if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $pasteMonth)) {
             $errors[] = 'Bulan tidak valid. Pilih periode YYYY-MM.';
         } elseif (trim($pasteData) === '') {
@@ -665,7 +678,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($headerIndex === null) {
-                $errors[] = 'Header tidak ditemukan. Pastikan ada kolom TANGGAL dan NAMA PELANGGAN.';
+                $contoh = trim(mb_substr($firstLine, 0, 140));
+                $petunjuk = $isPaste
+                    ? ' Salin dari <b>sel</b> Google Sheets (bukan teks hasil ketik), dan sertakan baris TANGGAL / NAMA PELANGGAN.'
+                    : '';
+                $errors[] = 'Header tidak ditemukan. Pastikan ada kolom TANGGAL dan NAMA PELANGGAN.' . $petunjuk
+                    . ' Baris pertama terbaca: <code>' . e($contoh) . '</code>';
             } else {
                 $batch = strtolower(preg_replace('/[^a-z0-9]+/i', '-', pathinfo($sourceName, PATHINFO_FILENAME)));
                 if ($rows) {
