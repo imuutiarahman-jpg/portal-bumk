@@ -286,6 +286,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $isPaste = true;
         $pasteMonth = trim((string) ($_POST['bulan_paste'] ?? ''));
         $pasteData = imp_normalize_paste((string) ($_POST['paste_data'] ?? ''));
+        $firstPasteLine = strtok($pasteData, "\n") ?: '';
+        $_POST['paste_headerless'] = (stripos($firstPasteLine, 'TANGGAL') !== false
+            && stripos($firstPasteLine, 'NAMA PELANGGAN') !== false) ? '0' : '1';
         if (strpos($pasteData, "\t") === false && strpos($pasteData, ',') === false && strpos($pasteData, ';') === false) {
             $errors[] = 'Format salinan tidak dikenali. Salin dari <b>sel Google Sheets</b> dengan Ctrl+C (pemisah tab otomatis ada), jangan mengetik atau menyalin teks biasa.';
         }
@@ -366,7 +369,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $batchMode = ($_POST['batch_mode'] ?? 'replace') === 'append' ? 'append' : 'replace';
 
             $rows = []; $skipped = []; $warnings = [];
-            $qtyByProduct = []; $qtyByMonthProduct = []; $sheetTotals = []; $monthCount = [];
+            $qtyByProduct = []; $qtyByMonthProduct = []; $sheetTotals = []; $sheetSales = []; $monthCount = [];
             $currentMonthKey = null;
             $monthNames = [
                 'JANUARI' => 1, 'FEBRUARI' => 2, 'MARET' => 3, 'APRIL' => 4, 'MEI' => 5, 'JUNI' => 6,
@@ -374,6 +377,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
             $headerIndex = null; $base = 0; $lineNo = 0; $lastDateRaw = '';
             $headerCols = []; $labelRows = []; $colMap = null;
+
+            // Tempel tanpa baris header: pakai urutan kolom tetap dari sheet yang disalin.
+            if ($isPaste && ($_POST['paste_headerless'] ?? '0') === '1') {
+                $base = 0;
+                $headerIndex = 1;
+                $currentMonthKey = $pasteMonth;
+                $colMap = [
+                    'base' => 0,
+                    'fields' => [
+                        'tanggal' => 0, 'nama' => 1, 'lunas' => 2, 'setor' => null,
+                        'cash' => 19, 'bank' => 20, 'tagihan' => 21, 'ket' => 22,
+                    ],
+                    'products' => [
+                        ['sku' => 'QMS-G19', 'qty' => 3,  'price' => 4,  'hpp' => 5],
+                        ['sku' => 'QMS-G22', 'qty' => 6,  'price' => 7,  'hpp' => 8],
+                        ['sku' => 'QMS-330', 'qty' => 9,  'price' => 10, 'hpp' => 11],
+                        ['sku' => 'QMS-B60', 'qty' => 12, 'price' => 13, 'hpp' => 14],
+                        ['sku' => 'QMS-B15', 'qty' => 15, 'price' => 16, 'hpp' => 17],
+                    ],
+                ];
+            }
+
             while (($cols = fgetcsv($handle, 0, $delim)) !== false) {
                 $lineNo++;
                 if ($lineNo === 1) $cols[0] = preg_replace('/^\xEF\xBB\xBF/', '', $cols[0] ?? '');
@@ -431,6 +456,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (isset($monthNames[$namaBulan])) {
                         $currentMonthKey = sprintf('%04d-%02d', $defaultYear, $monthNames[$namaBulan]);
                     }
+                    continue;
+                }
+                // Baris ringkasan sheet: simpan angka TOTAL PENJUALAN sebagai validasi.
+                if (str_contains(strtoupper($get(0)), 'TOTAL PENJUALAN')) {
+                    $angka = 0.0;
+                    foreach ($cols as $c) {
+                        $v = imp_money((string) $c);
+                        if ($v > $angka) $angka = $v;
+                    }
+                    if ($currentMonthKey && $angka > 0) $sheetSales[$currentMonthKey] = $angka;
                     continue;
                 }
                 // Baris ringkasan sheet: simpan angka TOTAL PRODUK TERJUAL sebagai pembanding.
@@ -550,6 +585,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $status = 'tunai'; $bank = null;
                 }
 
+                // Total transaksi mengikuti uang yang diterima: BANK → CASH → TAGIHAN.
+                $paymentTotal = $bankAmount > 0 ? $bankAmount : ($cash > 0 ? $cash : $tagihan);
+
                 $lunasRaw = $field('lunas', 2);
                 $lunasDate = imp_date($lunasRaw, $defaultYear);
                 if (!$lunasDate && stripos($lunasRaw, 'lunas') !== false) {
@@ -565,7 +603,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'setor_date'  => imp_date($setorRaw, $defaultYear),
                     'status'      => $status,
                     'bank'        => $bank,
-                    'total'       => $total,
+                    'total'       => $paymentTotal,
+                    'payment_total' => $paymentTotal,
+                    'item_total'  => $total,
                     'hpp'         => $hpp,
                     'items'       => $items,
                     'cash'        => $cash,
@@ -596,57 +636,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Samakan QTT tiap produk per bulan dengan angka ringkasan sheet.
             // Selisih dibagi mulai dari transaksi terakhir di bulan itu ke atas.
             $adjustLog = [];
-            $rowsByMonth = [];
-            foreach ($rows as $idx => $r) {
-                $mk = date('Y-m', strtotime($r['date']));
-                $rowsByMonth[$mk][] = $idx;
-            }
-            if (!$isPaste) {
-            foreach ($sheetTotals as $m => $targets) {
-                foreach ($targets as $sku => $sheetQty) {
-                    $target = (int) $sheetQty;
-                    $current = 0;
-                    $candidates = [];
-                    foreach (($rowsByMonth[$m] ?? []) as $idx) {
-                        foreach ($rows[$idx]['items'] as $j => $it) {
-                            if (($it['product']['sku'] ?? '') === $sku) {
-                                $current += (int) $it['qty'];
-                                $candidates[] = [$idx, $j];
-                            }
-                        }
-                    }
-                    $delta = $target - $current;
-                    if ($delta === 0 || !$candidates) continue;
 
-                    if ($delta > 0) {
-                        $last = end($candidates);
-                        $rows[$last[0]]['items'][$last[1]]['qty'] += $delta;
-                    } else {
-                        $need = -$delta;
-                        for ($k = count($candidates) - 1; $k >= 0 && $need > 0; $k--) {
-                            $idx = $candidates[$k][0];
-                            $j = $candidates[$k][1];
-                            $q = (int) $rows[$idx]['items'][$j]['qty'];
-                            $take = min($q, $need);
-                            $rows[$idx]['items'][$j]['qty'] = $q - $take;
-                            $need -= $take;
-                        }
-                    }
-                    $adjustLog[] = date('M Y', strtotime($m . '-01')) . ' · '
-                        . ($skuLabels[$sku] ?? $sku) . ': ' . angka($current) . ' → ' . angka($target);
-                }
-            }
-            }
-
-            // Hitung ulang subtotal & total transaksi setelah qty disesuaikan.
+            // Subtotal item tetap qty × price; total transaksi tetap dari BANK/CASH/TAGIHAN.
             foreach ($rows as $idx => $r) {
-                $newTotal = 0.0;
+                $newItemTotal = 0.0;
                 foreach ($rows[$idx]['items'] as $j => $it) {
                     $q = (int) $it['qty'];
                     $rows[$idx]['items'][$j]['subtotal'] = $q * (float) $it['price'];
-                    $newTotal += $q * (float) $it['price'];
+                    $newItemTotal += $q * (float) $it['price'];
                 }
-                $rows[$idx]['total'] = $newTotal;
+                $rows[$idx]['item_total'] = $newItemTotal;
+                $rows[$idx]['total'] = $rows[$idx]['payment_total'] ?? $newItemTotal;
             }
 
             $qtyByProduct = [];
@@ -671,12 +671,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            if ($adjustLog) {
-                $warnings[] = count($adjustLog) . ' QTT disesuaikan ke angka ringkasan sheet: '
-                    . implode(' · ', array_slice($adjustLog, 0, 8))
-                    . (count($adjustLog) > 8 ? ' …' : '');
-            }
-
             if ($headerIndex === null) {
                 $contoh = trim(mb_substr($firstLine, 0, 140));
                 $petunjuk = $isPaste
@@ -698,13 +692,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $warnings[] = $dupCount . ' baris memiliki transaksi kembar di batch lain. Jika tidak ingin dobel, hapus batch lama atau gunakan mode timpa.';
                     }
                 }
+                $salesByMonth = [];
+                foreach ($rows as $r) {
+                    $mk = date('Y-m', strtotime($r['date']));
+                    $salesByMonth[$mk] = ($salesByMonth[$mk] ?? 0) + (float) $r['total'];
+                }
                 $_SESSION['qmas_import'] = [
                     'batch' => $batch, 'batch_mode' => $batchMode, 'filename' => $sourceName,
                     'rows' => $rows, 'skipped' => $skipped, 'warnings' => $warnings,
                     'qty_by_product' => $qtyByProduct, 'qty_by_month' => $qtyByMonthProduct,
-                    'sheet_totals' => $isPaste ? [] : $sheetTotals,
-                    'qty_mismatch' => $isPaste ? [] : $qtyMismatch,
-                    'qty_adjustments' => $isPaste ? [] : ($adjustLog ?? []),
+                    'sheet_totals' => $sheetTotals,
+                    'sheet_sales' => $sheetSales,
+                    'sales_by_month' => $salesByMonth,
+                    'qty_mismatch' => $qtyMismatch,
+                    'qty_adjustments' => [],
                     'month_count' => $monthCount,
                     'detected_year' => $detectedYear,
                     'is_paste' => $isPaste,
@@ -848,6 +849,23 @@ require_once __DIR__ . '/../../includes/header.php';
             $byMonth = $preview['qty_by_month'];
             ksort($byMonth);
         ?>
+            <?php if (!empty($preview['sheet_sales'])): ?>
+                <div class="alert alert-info small py-2 mb-2">
+                    <b>Baris TOTAL dibaca sebagai validasi (tidak diimpor sebagai transaksi).</b><br>
+                    <?php foreach ($preview['sheet_sales'] as $m => $nominal):
+                        $hitung = (float) ($preview['sales_by_month'][$m] ?? 0);
+                    ?>
+                        <?= e(date('M Y', strtotime($m . '-01'))) ?>:
+                        sheet <b><?= rupiah($nominal) ?></b> ·
+                        hasil baris <b><?= rupiah($hitung) ?></b>
+                        <?php if (abs($nominal - $hitung) < 1): ?>
+                            <span class="badge bg-success">Sama</span>
+                        <?php else: ?>
+                            <span class="badge bg-warning text-dark">Selisih</span>
+                        <?php endif; ?><br>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
             <div class="alert alert-light small py-2 mb-2"><b>QTT per bulan</b> <?php if (!empty($preview['is_paste'])): ?>dari data yang ditempel — dipakai persis tanpa penyesuaian.<?php else: ?>dihitung dari baris transaksi. Bandingkan dengan baris <code>TOTAL PRODUK TERJUAL</code> di sheet.<?php endif; ?></div>
             <div class="table-responsive mb-3">
                 <table class="table table-sm mb-0">
@@ -944,7 +962,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <textarea id="pasteData" name="paste_data" class="form-control" rows="6" placeholder="TANGGAL &lt;tab&gt; NAMA PELANGGAN ..." required></textarea>
                 </div>
             </div>
-            <div class="form-text small mb-2">Salin blok lengkap mulai baris <b>TANGGAL / NAMA PELANGGAN</b>, sub-header <b>QTT / PRICE</b>, sampai baris transaksi bulan yang dipilih. QTT dipakai <b>persis seperti yang ditempel</b>; batch akan <b>timpa</b> data bulan yang sama.</div>
+            <div class="form-text small mb-2">Boleh menyalin lengkap dengan header, atau langsung baris transaksi saja (urutan kolom mengikuti sheet). Baris <b>TOTAL PRODUK TERJUAL / TOTAL PENJUALAN</b> dibaca sebagai validasi, bukan transaksi. QTT dipakai <b>persis seperti yang ditempel</b>; batch akan <b>timpa</b> data bulan yang sama.</div>
             <button class="btn btn-outline-primary"><i class="bi bi-eye"></i> Pratinjau Data Ditempel</button>
         </form>
     </div>
