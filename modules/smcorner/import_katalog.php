@@ -9,77 +9,6 @@ $activeUnit = 'smcorner';
 $errors = [];
 $preview = null;
 
-function kat_money(string $s): float
-{
-    return (float) preg_replace('/\D/', '', $s);
-}
-
-/** Fallback: file CSV (tab ringkasan saja, seperti format lama). */
-function sm_import_parse_csv(string $path, string $sourceName, string $sheetId): array
-{
-    $handle = fopen($path, 'r');
-    $firstLine = fgets($handle) ?: '';
-    rewind($handle);
-    $delim = (substr_count($firstLine, ',') >= substr_count($firstLine, ';')) ? ',' : ';';
-    $allRows = [];
-    while (($cols = fgetcsv($handle, 0, $delim)) !== false) {
-        $cols = array_map('trim', $cols);
-        if ($allRows === []) $cols[0] = preg_replace('/^\xEF\xBB\xBF/', '', $cols[0] ?? '');
-        $allRows[] = $cols;
-    }
-    fclose($handle);
-
-    $exportDate = '';
-    foreach ($allRows as $r) {
-        if (stripos(implode(' ', $r), 'Tanggal Ekspor:') !== false && preg_match('/Tanggal Ekspor:\s*(.+)$/i', implode(' ', $r), $m)) {
-            $exportDate = trim($m[1]);
-            break;
-        }
-    }
-    $catIdx = null;
-    foreach ($allRows as $r) {
-        foreach ($r as $i => $c) {
-            if (strtoupper($c) === 'KATEGORI') { $catIdx = $i; break 2; }
-        }
-    }
-    $summary = [];
-    if ($catIdx === null) {
-        $errors[] = 'Header "Kategori" tidak ditemukan pada file CSV.';
-    } else {
-        $started = false;
-        foreach ($allRows as $r) {
-            if (!$started) {
-                if (stripos(implode(' ', $r), 'REKAPITULASI PRODUK & STOK PER KATEGORI') !== false) $started = true;
-                continue;
-            }
-            $cat = trim((string) ($r[$catIdx] ?? ''));
-            if ($cat === '' || strtoupper($cat) === 'KATEGORI') continue;
-            $isTotal = stripos($cat, 'TOTAL KESELURUHAN') !== false;
-            $summary[] = [
-                'category' => $isTotal ? 'TOTAL KESELURUHAN' : $cat,
-                'product_count' => kat_money($r[$catIdx + 1] ?? '0'),
-                'variant_count' => kat_money($r[$catIdx + 2] ?? '0'),
-                'stock_total' => kat_money($r[$catIdx + 3] ?? '0'),
-                'value' => kat_money($r[$catIdx + 4] ?? '0'),
-                'avg' => kat_money($r[$catIdx + 5] ?? '0'),
-                'is_total' => $isTotal ? 1 : 0,
-            ];
-        }
-    }
-    $categories = [];
-    foreach ($summary as $s) {
-        if (!$s['is_total']) $categories[] = ['source_key' => $s['category'], 'name' => $s['category'], 'default_sizes' => ''];
-    }
-    return [
-        'sheet_id' => $sheetId, 'export_date' => $exportDate,
-        'batch' => 'csv-' . $sheetId . '-' . md5($exportDate . count($summary)),
-        'filename' => $sourceName,
-        'categories' => $categories, 'products' => [], 'variants' => [], 'history' => [],
-        'summary' => $summary, 'warnings' => ['CSV hanya memuat tab ringkasan. Gunakan link Google Sheets untuk mengambil semua tab.'],
-        'counts' => ['categories' => count($categories), 'products' => 0, 'variants' => 0, 'history' => 0, 'summary' => count($summary)],
-    ];
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
@@ -120,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif (!preg_match('/\.csv$/i', $_FILES['csv']['name'])) {
                 $errors[] = 'File harus berformat .csv.';
             } else {
-                $data = sm_import_parse_csv($_FILES['csv']['tmp_name'], $_FILES['csv']['name'], 'csv');
+                $data = sm_import_parse_csv($_FILES['csv']['tmp_name'], $_FILES['csv']['name'], 'csv', $errors);
             }
         }
 

@@ -100,8 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'setstock') {
-        run('UPDATE sm_products SET stock=? WHERE id=?', [max(0, (int) ($_POST['stock'] ?? 0)), (int) $_POST['id']]);
-        flash_set('success', 'Stok diperbarui.');
+        sm_import_set_product_stock((int) $_POST['id'], (int) ($_POST['stock'] ?? 0));
+        flash_set('success', 'Stok diperbarui (termasuk varian ukuran).');
         redirect('/modules/smcorner/produk.php');
     }
 }

@@ -269,26 +269,56 @@ function random_password(int $length = 12): string
 
 /* ---------- Google Sheets helper (dipakai modul import) ---------- */
 
-function sheet_export_url(string $url): array
+/** Validasi link Google Sheets → [id, gid, error]. */
+function sheet_link_info(string $url): array
 {
     $url = trim($url);
-    if ($url === '') return [null, '', ''];
+    if ($url === '') return [null, '0', ''];
     $parts = parse_url($url);
-    if (!$parts || strtolower($parts['scheme'] ?? '') !== 'https') {
-        return [null, '', 'Link harus diawali https://'];
-    }
-    $host = strtolower($parts['host'] ?? '');
-    if (!in_array($host, ['docs.google.com', 'www.docs.google.com'], true)) {
-        return [null, '', 'Hanya link Google Sheets (docs.google.com) yang didukung.'];
+    if (!$parts || strtolower($parts['scheme'] ?? '') !== 'https') return [null, '0', 'Link harus diawali https://'];
+    if (!in_array(strtolower($parts['host'] ?? ''), ['docs.google.com', 'www.docs.google.com'], true)) {
+        return [null, '0', 'Hanya link Google Sheets (docs.google.com) yang didukung.'];
     }
     if (!preg_match('#/spreadsheets/d/([A-Za-z0-9_-]+)#', $parts['path'] ?? '', $m)) {
-        return [null, '', 'ID sheet tidak ditemukan dalam link.'];
+        return [null, '0', 'ID sheet tidak ditemukan dalam link.'];
     }
-    $id = $m[1];
     $gid = '0';
     foreach (['query', 'fragment'] as $key) {
         if (!empty($parts[$key]) && preg_match('/(?:^|&)gid=(\d+)/', $parts[$key], $g)) { $gid = $g[1]; break; }
     }
+    return [$m[1], $gid, ''];
+}
+
+/** Ambil konten URL via cURL. Return [content, error]. */
+function sheet_fetch_content(string $url, int $timeout = 20): array
+{
+    if (!function_exists('curl_init')) return [null, 'cURL tidak tersedia di server XAMPP.'];
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+        CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_USERAGENT => 'Portal-BUMK-UMGO-Import/1.0',
+        CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+    ]);
+    $content = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    if ($content === false) return [null, 'Gagal mengambil sheet: ' . $err];
+    if ($code !== 200) return [null, 'Google mengembalikan HTTP ' . $code . '.'];
+    if (trim($content) === '') return [null, 'Sheet kosong.'];
+    $head = ltrim(substr($content, 0, 600));
+    if (stripos($head, '<!DOCTYPE html') === 0 || stripos($head, '<html') === 0 || stripos($head, '<?xml') === 0) {
+        return [null, 'Sheet tidak bisa diakses. Pastikan Sharing = "Siapa pun yang memiliki link" (Viewer).'];
+    }
+    return [$content, ''];
+}
+
+function sheet_export_url(string $url): array
+{
+    [$id, $gid, $error] = sheet_link_info($url);
+    if ($error !== '') return [null, '', $error];
+    if (!$id) return [null, '', ''];
     return [
         'https://docs.google.com/spreadsheets/d/' . $id . '/export?format=csv&gid=' . $gid,
         'sheet-' . $id . '-gid' . $gid,
@@ -298,26 +328,9 @@ function sheet_export_url(string $url): array
 
 function sheet_fetch_csv(string $exportUrl): array
 {
-    if (!function_exists('curl_init')) return [null, 'cURL tidak tersedia di server XAMPP.'];
-    $ch = curl_init($exportUrl);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
-        CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => 20,
-        CURLOPT_USERAGENT => 'Portal-BUMK-UMGO-Import/1.0',
-        CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
-    ]);
-    $content = curl_exec($ch);
-    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err = curl_error($ch);
-    curl_close($ch);
-    if ($content === false) return [null, 'Gagal mengambil sheet: ' . $err];
-    if ($code !== 200) return [null, 'Google mengembalikan HTTP ' . $code . '.'];
+    [$content, $error] = sheet_fetch_content($exportUrl);
+    if ($error !== '') return [null, $error];
     if (strlen($content) > 10 * 1024 * 1024) return [null, 'CSV terlalu besar (maksimal 10 MB).'];
-    $head = ltrim(substr($content, 0, 600));
-    if (stripos($head, '<!DOCTYPE html') === 0 || stripos($head, '<html') === 0 || stripos($head, '<?xml') === 0) {
-        return [null, 'Sheet tidak bisa diakses. Pastikan Sharing = "Siapa pun yang memiliki link" (Viewer).'];
-    }
-    if (trim($content) === '') return [null, 'Sheet kosong.'];
     return [$content, ''];
 }
 
@@ -326,39 +339,17 @@ function sheet_fetch_csv(string $exportUrl): array
 /** Ubah link edit Google Sheets menjadi URL ekspor XLSX (semua tab). */
 function sheet_xlsx_url(string $url): array
 {
-    $url = trim($url);
-    if ($url === '') return [null, '', ''];
-    $parts = parse_url($url);
-    if (!$parts || strtolower($parts['scheme'] ?? '') !== 'https') {
-        return [null, '', 'Link harus diawali https://'];
-    }
-    $host = strtolower($parts['host'] ?? '');
-    if (!in_array($host, ['docs.google.com', 'www.docs.google.com'], true)) {
-        return [null, '', 'Hanya link Google Sheets (docs.google.com) yang didukung.'];
-    }
-    if (!preg_match('#/spreadsheets/d/([A-Za-z0-9_-]+)#', $parts['path'] ?? '', $m)) {
-        return [null, '', 'ID sheet tidak ditemukan dalam link.'];
-    }
-    return ['https://docs.google.com/spreadsheets/d/' . $m[1] . '/export?format=xlsx', $m[1], ''];
+    [$id, , $error] = sheet_link_info($url);
+    if ($error !== '') return [null, '', $error];
+    if (!$id) return [null, '', ''];
+    return ['https://docs.google.com/spreadsheets/d/' . $id . '/export?format=xlsx', $id, ''];
 }
 
 /** Unduh XLSX ke file sementara. Return [path, error]. */
 function sheet_fetch_xlsx(string $exportUrl): array
 {
-    if (!function_exists('curl_init')) return [null, 'cURL tidak tersedia di server XAMPP.'];
-    $ch = curl_init($exportUrl);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
-        CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => 30,
-        CURLOPT_USERAGENT => 'Portal-BUMK-UMGO-Import/1.0',
-        CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
-    ]);
-    $content = curl_exec($ch);
-    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err = curl_error($ch);
-    curl_close($ch);
-    if ($content === false) return [null, 'Gagal mengambil sheet: ' . $err];
-    if ($code !== 200) return [null, 'Google mengembalikan HTTP ' . $code . '.'];
+    [$content, $error] = sheet_fetch_content($exportUrl, 30);
+    if ($error !== '') return [null, $error];
     if (strlen($content) > 20 * 1024 * 1024) return [null, 'File XLSX terlalu besar (maksimal 20 MB).'];
     if (strncmp($content, 'PK', 2) !== 0) {
         return [null, 'File yang diunduh bukan XLSX. Pastikan Sharing = "Siapa pun yang memiliki link" (Viewer).'];

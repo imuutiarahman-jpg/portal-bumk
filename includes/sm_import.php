@@ -7,6 +7,9 @@
 /** Pastikan tabel & kolom pendukung tersedia (aman dijalankan berulang). */
 function sm_import_ensure_schema(): void
 {
+    static $done = false;
+    if ($done) return;
+    $done = true;
     $pdo = db();
     $tables = [
         'sm_product_variants' => "CREATE TABLE IF NOT EXISTS `sm_product_variants` (
@@ -132,6 +135,78 @@ function sm_import_cell(array $row, ?string $col): string
 function sm_import_num($value): float
 {
     return (float) preg_replace('/[^\d.\-]/', '', (string) $value);
+}
+
+/** Fallback CSV: hanya blok ringkasan (format lama). */
+function sm_import_parse_csv(string $path, string $sourceName, string $sheetId, array &$errors): array
+{
+    $handle = fopen($path, 'r');
+    if (!$handle) { $errors[] = 'File CSV tidak bisa dibaca.'; return []; }
+    $firstLine = fgets($handle) ?: '';
+    rewind($handle);
+    $delim = substr_count($firstLine, ',') >= substr_count($firstLine, ';') ? ',' : ';';
+    $rows = [];
+    while (($cols = fgetcsv($handle, 0, $delim)) !== false) {
+        $cols = array_map('trim', $cols);
+        if (!$rows) $cols[0] = preg_replace('/^\xEF\xBB\xBF/', '', $cols[0] ?? '');
+        $rows[] = $cols;
+    }
+    fclose($handle);
+
+    $exportDate = '';
+    $catIdx = null;
+    foreach ($rows as $row) {
+        $joined = implode(' ', $row);
+        if ($exportDate === '' && stripos($joined, 'Tanggal Ekspor:') !== false && preg_match('/Tanggal Ekspor:\s*(.+)$/i', $joined, $m)) {
+            $exportDate = trim($m[1]);
+        }
+        foreach ($row as $i => $cell) {
+            if (strtoupper($cell) === 'KATEGORI') $catIdx = $i;
+        }
+    }
+    if ($catIdx === null) {
+        $errors[] = 'Header "Kategori" tidak ditemukan pada file CSV.';
+        return [];
+    }
+
+    $summary = [];
+    $started = false;
+    foreach ($rows as $row) {
+        if (!$started) {
+            if (stripos(implode(' ', $row), 'REKAPITULASI PRODUK & STOK PER KATEGORI') !== false) $started = true;
+            continue;
+        }
+        $cat = trim((string) ($row[$catIdx] ?? ''));
+        if ($cat === '' || strtoupper($cat) === 'KATEGORI') continue;
+        $isTotal = stripos($cat, 'TOTAL KESELURUHAN') !== false;
+        $summary[] = [
+            'category' => $isTotal ? 'TOTAL KESELURUHAN' : $cat,
+            'product_count' => sm_import_num($row[$catIdx + 1] ?? 0),
+            'variant_count' => sm_import_num($row[$catIdx + 2] ?? 0),
+            'stock_total' => sm_import_num($row[$catIdx + 3] ?? 0),
+            'value' => sm_import_num($row[$catIdx + 4] ?? 0),
+            'avg' => sm_import_num($row[$catIdx + 5] ?? 0),
+            'is_total' => $isTotal ? 1 : 0,
+        ];
+    }
+    if (!$summary) {
+        $errors[] = 'Tidak ada baris kategori yang bisa dibaca dari CSV.';
+        return [];
+    }
+
+    $categories = [];
+    foreach ($summary as $s) {
+        if (!$s['is_total']) $categories[] = ['source_key' => $s['category'], 'name' => $s['category'], 'default_sizes' => ''];
+    }
+    return [
+        'sheet_id' => $sheetId, 'export_date' => $exportDate,
+        'batch' => 'csv-' . $sheetId . '-' . md5($exportDate . count($summary)),
+        'filename' => $sourceName, 'categories' => $categories,
+        'products' => [], 'variants' => [], 'history' => [], 'summary' => $summary,
+        'warnings' => ['CSV hanya memuat tab ringkasan. Gunakan link Google Sheets untuk mengambil semua tab.'],
+        'counts' => ['categories' => count($categories), 'products' => 0, 'variants' => 0,
+            'history' => 0, 'summary' => count($summary)],
+    ];
 }
 
 /**
@@ -390,7 +465,47 @@ function sm_import_parse(array $sheets, string $sheetId): array
     return $result;
 }
 
-/**Simpan data hasil pratinjau ke database dalam satu transaksi. */
+/** Set stok produk dan sebar selisihnya ke varian ukuran. */
+function sm_import_set_product_stock(int $productId, int $newStock): void
+{
+    $newStock = max(0, $newStock);
+    $variants = all('SELECT id, stock FROM sm_product_variants WHERE product_id=? ORDER BY stock DESC, id', [$productId]);
+    if (!$variants) {
+        run('UPDATE sm_products SET stock=? WHERE id=?', [$newStock, $productId]);
+        return;
+    }
+
+    $delta = $newStock - (int) array_sum(array_column($variants, 'stock'));
+    if ($delta > 0) {
+        $weights = array_map(fn($v) => (int) $v['stock'], $variants);
+        if (array_sum($weights) <= 0) $weights = array_fill(0, count($variants), 1);
+        $total = array_sum($weights);
+        $alloc = []; $given = 0;
+        foreach ($weights as $i => $w) {
+            $alloc[$i] = (int) floor($delta * $w / $total);
+            $given += $alloc[$i];
+        }
+        for ($i = 0, $rem = $delta - $given; $i < $rem; $i++) $alloc[$i % count($alloc)]++;
+        foreach ($alloc as $i => $qty) {
+            if ($qty > 0) run('UPDATE sm_product_variants SET stock=stock+? WHERE id=?', [$qty, $variants[$i]['id']]);
+        }
+    } elseif ($delta < 0) {
+        $need = -$delta;
+        foreach ($variants as $v) {
+            if ($need <= 0) break;
+            $take = min($need, (int) $v['stock']);
+            if ($take > 0) {
+                run('UPDATE sm_product_variants SET stock=stock-? WHERE id=?', [$take, $v['id']]);
+                $need -= $take;
+            }
+        }
+    }
+
+    $actual = (int) val('SELECT COALESCE(SUM(stock),0) FROM sm_product_variants WHERE product_id=?', [$productId]);
+    run('UPDATE sm_products SET stock=? WHERE id=?', [$actual, $productId]);
+}
+
+/** Simpan data hasil pratinjau ke database dalam satu transaksi. */
 function sm_import_commit(array $data): void
 {
     sm_import_ensure_schema();
