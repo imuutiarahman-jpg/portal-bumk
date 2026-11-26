@@ -92,7 +92,7 @@ Portal Utama (landing: header 80px, hero 280px, 3 kartu unit, footer 70px)
 - Kasir POS dengan pencarian cepat + cetak struk
 - **Pembelian / Stok Masuk**: nota supplier (Tunai/Transfer/Piutang + bank), stok & HPP otomatis, riwayat + laporan pembelian export CSV
 - **Rekap Bulanan**: omzet, HPP, laba per bulan + chart + export CSV
-- **Import Katalog Sheet**: tarik ringkasan kategori & inventori langsung dari link Google Sheets (atau CSV), pratinjau dulu, lalu simpan ke `sm_catalog_summary`; nama kategori otomatis dibuat di `sm_categories`. Hanya ringkasan yang tersedia di sheet, bukan daftar per produk.
+- **Import Katalog Lengkap**: cukup tempel link Google Sheets → semua tab diambil sekaligus (XLSX): `Master Kategori` → `sm_categories`, `Katalog Produk` → `sm_products` (SKU unik), `Detail Stok & Harga` → `sm_product_variants`, `Riwayat Stok` → `sm_stock_history`, `Ringkasan` → `sm_catalog_summary`. Ada pratinjau + peringatan kualitas data sebelum commit. File CSV (tab ringkasan saja) tetap diterima sebagai fallback. Skema dibuat otomatis saat halaman import/kasir/pembelian dibuka.
 - Import transaksi CSV menyusul setelah data penjualan SM Corner tersedia (tidak memakai format Qmas)
 
 ### Daqam Caffe
@@ -117,7 +117,7 @@ portal-bumk/
 │   ├── portal/      landing
 │   ├── superadmin/  dashboard omzet gabungan
 │   ├── qmas/        dashboard, transaksi, stok, pembelian, laporan, rekap, import, import_pembelian
-│   ├── smcorner/    dashboard, produk, pembelian, kasir, laporan, rekap
+│   ├── smcorner/    dashboard, produk, pembelian, kasir, laporan, rekap, import_katalog
 │   └── daqam/       dashboard, kasir, menu, bahanbaku, shift, laporan
 ├── contoh/contoh_import_qmas.csv   # template CSV contoh
 └── sql/
@@ -131,7 +131,8 @@ portal-bumk/
     ├── update_qmas_opening_stock_date.sql  # tanggal stok awal + angka penyeimbang
     ├── update_qmas_pembelian_lunas.sql     # kolom lunas_date nota pembelian
     ├── update_qmas_setor_tunai_lama.sql     # opsional: tunai lama → transfer
-    └── update_smcorner_lengkap.sql  # HPP + pembelian SM Corner
+    ├── update_smcorner_lengkap.sql  # HPP + pembelian SM Corner
+    └── update_sm_import_lengkap.sql # varian, riwayat stok, batch import katalog (opsional; otomatis saat pakai)
 ```
 
 ## 6. Catatan Desain

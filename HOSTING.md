@@ -40,10 +40,11 @@ Buka phpMyAdmin hosting → pilih database → tab **Import**.
 5. `sql/update_qmas_pembelian.sql`
 6. `sql/update_smcorner_lengkap.sql`
 7. `sql/update_sm_import_katalog.sql`
-8. `sql/update_keamanan_akun.sql`
-9. `sql/update_qmas_opening_stock_date.sql` (stok awal bertanggal; lewati jika kolom sudah ada)
-10. `sql/update_qmas_pembelian_lunas.sql` (kolom `lunas_date` nota pembelian; lewati jika kolom sudah ada)
-11. Opsional: `sql/update_qmas_setor_tunai_lama.sql` (ubah transaksi tunai sebelum 24 Nov 2026 jadi transfer di database)
+8. `sql/update_sm_import_lengkap.sql` (varian ukuran, riwayat stok, batch import — dijalankan otomatis saat pakai halaman import, opsional jika sudah dijalankan manual)
+9. `sql/update_keamanan_akun.sql`
+10. `sql/update_qmas_opening_stock_date.sql` (stok awal bertanggal; lewati jika kolom sudah ada)
+11. `sql/update_qmas_pembelian_lunas.sql` (kolom `lunas_date` nota pembelian; lewati jika kolom sudah ada)
+12. Opsional: `sql/update_qmas_setor_tunai_lama.sql` (ubah transaksi tunai sebelum 24 Nov 2026 jadi transfer di database)
 
 > Catatan: nomor 4 dan 6 memakai `CREATE PROCEDURE`. Jika user hosting tidak boleh membuat routine, gunakan `sql/migrasi_tanpa_prosedur.sql` (jalankan hanya baris untuk kolom yang belum ada).
 

@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../includes/sm_import.php';
 require_login();
 require_unit('smcorner');
+sm_import_ensure_schema();
 
 $title = 'Pembelian / Stok Masuk – SM Corner';
 $activeUnit = 'smcorner';
@@ -20,17 +22,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($supplier === '') $errors[] = 'Nama supplier wajib diisi.';
     $purchaseDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) ? $dateRaw . ' ' . date('H:i:s') : date('Y-m-d H:i:s');
 
-    $pids = $_POST['product_id'] ?? []; $qtys = $_POST['quantity'] ?? []; $prices = $_POST['unit_price'] ?? [];
+    $pids = $_POST['product_id'] ?? []; $vids = $_POST['variant_id'] ?? []; $qtys = $_POST['quantity'] ?? []; $prices = $_POST['unit_price'] ?? [];
     $items = []; $seen = [];
     foreach ($pids as $i => $pid) {
-        $pid = (int) $pid; $qty = (int) ($qtys[$i] ?? 0); $price = max(0, (float) ($prices[$i] ?? 0));
+        $pid = (int) $pid; $vid = (int) ($vids[$i] ?? 0); $qty = (int) ($qtys[$i] ?? 0); $price = max(0, (float) ($prices[$i] ?? 0));
         if ($pid < 1 || $qty < 1) continue;
-        if (isset($seen[$pid])) { $errors[] = 'Produk tidak boleh duplikat dalam satu nota pembelian.'; break; }
-        $seen[$pid] = true;
+        $key = $pid . '-' . $vid;
+        if (isset($seen[$key])) { $errors[] = 'Produk/varian tidak boleh duplikat dalam satu nota pembelian.'; break; }
+        $seen[$key] = true;
         $p = row('SELECT * FROM sm_products WHERE id=?', [$pid]);
         if (!$p) { $errors[] = 'Produk tidak ditemukan.'; continue; }
+        $size = (string) $p['size'];
+        if ($vid > 0) {
+            $v = row('SELECT * FROM sm_product_variants WHERE id=? AND product_id=?', [$vid, $pid]);
+            if (!$v) { $errors[] = 'Varian tidak ditemukan.'; continue; }
+            $size = (string) $v['size_name'];
+        }
         if ($price <= 0) $price = (float) $p['cost'] ?: (float) $p['price'];
-        $items[] = ['product' => $p, 'qty' => $qty, 'price' => $price, 'subtotal' => $qty * $price];
+        $items[] = ['product' => $p, 'variant_id' => $vid, 'size' => $size, 'qty' => $qty, 'price' => $price, 'subtotal' => $qty * $price];
     }
     if (!$items) $errors[] = 'Tambahkan minimal satu produk dengan jumlah lebih dari 0.';
 
@@ -43,8 +52,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 [$no, $purchaseDate, $invoice, $supplier, $status, $bank, $total, $notes, current_user()['id']]);
             $purchaseId = last_id();
             foreach ($items as $it) {
-                run('INSERT INTO sm_purchase_items (purchase_id,product_id,quantity,unit_price,subtotal) VALUES (?,?,?,?,?)',
-                    [$purchaseId, $it['product']['id'], $it['qty'], $it['price'], $it['subtotal']]);
+                run('INSERT INTO sm_purchase_items (purchase_id,product_id,variant_id,quantity,unit_price,subtotal) VALUES (?,?,?,?,?,?)',
+                    [$purchaseId, $it['product']['id'], $it['variant_id'] ?: null, $it['qty'], $it['price'], $it['subtotal']]);
+                if ($it['variant_id']) run('UPDATE sm_product_variants SET stock = stock + ? WHERE id=?', [$it['qty'], $it['variant_id']]);
                 run('UPDATE sm_products SET stock = stock + ?, cost = ? WHERE id=?', [$it['qty'], $it['price'], $it['product']['id']]);
             }
             $pdo->commit();
@@ -58,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $detail = null; $detailItems = [];
 if (!empty($_GET['detail'])) {
     $detail = row('SELECT * FROM sm_purchases WHERE id=?', [(int) $_GET['detail']]);
-    if ($detail) $detailItems = all('SELECT i.*, p.name product_name, p.size FROM sm_purchase_items i JOIN sm_products p ON p.id=i.product_id WHERE i.purchase_id=?', [$detail['id']]);
+    if ($detail) $detailItems = all('SELECT i.*, p.name product_name, COALESCE(v.size_name,p.size) size FROM sm_purchase_items i JOIN sm_products p ON p.id=i.product_id LEFT JOIN sm_product_variants v ON v.id=i.variant_id WHERE i.purchase_id=?', [$detail['id']]);
 }
 
 $from = $_GET['from'] ?? date('Y-m-01');
@@ -82,6 +92,18 @@ if (($_GET['export'] ?? '') === 'csv') {
 
 $list = all('SELECT * FROM sm_purchases ORDER BY purchase_date DESC LIMIT 30');
 $products = all('SELECT * FROM sm_products ORDER BY name');
+$variantOptions = [];
+$withVariants = [];
+foreach (all('SELECT v.*, p.name product_name, p.cost FROM sm_product_variants v JOIN sm_products p ON p.id=v.product_id ORDER BY p.name, v.size_name') as $v) {
+    $variantOptions[] = ['id'=>(int)$v['product_id'], 'variant'=>(int)$v['id'],
+        'label'=>$v['product_name'].' ('.$v['size_name'].')', 'cost'=>(float)$v['price']];
+    $withVariants[(int)$v['product_id']] = true;
+}
+foreach ($products as $p) {
+    if (isset($withVariants[(int)$p['id']])) continue;
+    $variantOptions[] = ['id'=>(int)$p['id'], 'variant'=>0,
+        'label'=>$p['name'].' ('.$p['size'].')', 'cost'=>(float)$p['cost'] ?: (float)$p['price']];
+}
 $today = val('SELECT COALESCE(SUM(total_amount),0) FROM sm_purchases WHERE DATE(purchase_date)=CURDATE()');
 $month = val('SELECT COALESCE(SUM(total_amount),0) FROM sm_purchases WHERE DATE_FORMAT(purchase_date,"%Y-%m")=DATE_FORMAT(CURDATE(),"%Y-%m")');
 
@@ -122,7 +144,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div class="mb-2"><label class="form-label small fw-semibold">Nama Supplier</label><input name="supplier_name" class="form-control form-control-sm" required></div>
                 <div class="row g-2 mb-2"><div class="col-6"><label class="form-label small fw-semibold">Status Bayar</label><select name="payment_status" id="payStatus" class="form-select form-select-sm"><option value="tunai">Tunai</option><option value="transfer">Transfer</option><option value="piutang">Piutang</option></select></div><div class="col-6" id="bankWrap" style="display:none"><label class="form-label small fw-semibold">Bank</label><select name="bank" id="bankSelect" class="form-select form-select-sm"><option value="">-- Pilih --</option><option value="BSI">BSI</option><option value="MUAMALAT">Muamalat</option></select></div></div>
                 <label class="form-label small fw-semibold">Item Pembelian</label>
-                <div id="itemRows"><div class="row g-2 item-row mb-2"><div class="col-5"><select name="product_id[]" class="form-select form-select-sm" required><?php foreach ($products as $p): ?><option value="<?= $p['id'] ?>" data-cost="<?= (float) $p['cost'] ?>"><?= e($p['name'].' ('.$p['size'].')') ?></option><?php endforeach; ?></select></div><div class="col-3"><input type="number" name="quantity[]" class="form-control form-control-sm qty" min="1" value="1" required></div><div class="col-4"><input type="number" name="unit_price[]" class="form-control form-control-sm price" min="0" value="<?= e($products[0]['cost'] ?? 0) ?>" required></div></div></div>
+                <div id="itemRows"><div class="row g-2 item-row mb-2"><div class="col-5"><select name="product_id[]" class="form-select form-select-sm" required><?php foreach ($variantOptions as $o): ?><option value="<?= $o['id'] ?>" data-variant="<?= $o['variant'] ?>" data-cost="<?= $o['cost'] ?>"><?= e($o['label']) ?></option><?php endforeach; ?></select><input type="hidden" name="variant_id[]" value="<?= $variantOptions[0]['variant'] ?? 0 ?>"></div><div class="col-3"><input type="number" name="quantity[]" class="form-control form-control-sm qty" min="1" value="1" required></div><div class="col-4"><input type="number" name="unit_price[]" class="form-control form-control-sm price" min="0" value="<?= e($variantOptions[0]['cost'] ?? 0) ?>" required></div></div></div>
                 <button type="button" class="btn btn-sm btn-outline-success mb-2" id="addRow"><i class="bi bi-plus"></i> Tambah Item</button>
                 <div class="mb-3"><label class="form-label small fw-semibold">Catatan</label><input name="notes" class="form-control form-control-sm"></div>
                 <button class="btn w-100 text-white fw-bold" style="background:var(--smcorner)"><i class="bi bi-check2-circle"></i> Simpan Pembelian</button>
@@ -163,12 +185,17 @@ document.addEventListener('DOMContentLoaded', function () {
         row.querySelector('.qty').value = 1;
         var s = row.querySelector('select');
         row.querySelector('.price').value = s.options[s.selectedIndex].dataset.cost || 0;
+        var h = row.querySelector('input[name="variant_id[]"]');
+        if (h) h.value = s.options[s.selectedIndex].dataset.variant || 0;
         wrap.appendChild(row);
     });
     wrap.addEventListener('change', function (e) {
         if (e.target.tagName === 'SELECT') {
-            var price = e.target.parentElement.parentElement.querySelector('.price');
-            price.value = e.target.options[e.target.selectedIndex].dataset.cost || 0;
+            var row = e.target.parentElement.parentElement;
+            var opt = e.target.options[e.target.selectedIndex];
+            row.querySelector('.price').value = opt.dataset.cost || 0;
+            var h = e.target.parentElement.querySelector('input[name="variant_id[]"]');
+            if (h) h.value = opt.dataset.variant || 0;
         }
     });
 });

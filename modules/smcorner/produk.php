@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../includes/sm_import.php';
 require_login();
 require_unit('smcorner');
+sm_import_ensure_schema();
 
 $title = 'Katalog & Stok – SM Corner';
 $activeUnit = 'smcorner';
@@ -104,9 +106,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$products = all('SELECT p.*, c.name category_name FROM sm_products p JOIN sm_categories c ON c.id=p.category_id ORDER BY c.name, p.name');
+$products = all('SELECT p.*, c.name category_name,
+    (SELECT COUNT(*) FROM sm_product_variants v WHERE v.product_id=p.id) variant_count,
+    (SELECT MIN(v.price) FROM sm_product_variants v WHERE v.product_id=p.id) variant_min,
+    (SELECT MAX(v.price) FROM sm_product_variants v WHERE v.product_id=p.id) variant_max
+    FROM sm_products p JOIN sm_categories c ON c.id=p.category_id ORDER BY c.name, p.name');
 $categories = all('SELECT * FROM sm_categories ORDER BY name');
-$inventory = val('SELECT COALESCE(SUM(stock*price),0) FROM sm_products');
+$inventory = val('SELECT COALESCE(SUM(stock*price),0) FROM sm_product_variants');
+if (!$inventory) $inventory = val('SELECT COALESCE(SUM(stock*price),0) FROM sm_products');
 $hppValue = val('SELECT COALESCE(SUM(stock*cost),0) FROM sm_products');
 
 require_once __DIR__ . '/../../includes/header.php';
@@ -124,12 +131,13 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="card content-card">
             <div class="card-header">Daftar Produk</div>
             <div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle">
-                <thead class="table-light"><tr><th>Produk</th><th>SKU</th><th>Kategori</th><th>Ukuran</th><th class="text-end">Harga</th><th class="text-end">HPP</th><th class="text-end">Stok</th><th>Aksi</th></tr></thead>
+                <thead class="table-light"><tr><th>Produk</th><th>SKU</th><th>Kategori</th><th>Ukuran</th><th>Varian</th><th class="text-end">Harga</th><th class="text-end">HPP</th><th class="text-end">Stok</th><th>Aksi</th></tr></thead>
                 <tbody><?php foreach ($products as $p):
                     $used = (int) val('SELECT COUNT(*) FROM sm_transaction_items WHERE product_id=?', [$p['id']]) + (int) val('SELECT COUNT(*) FROM sm_purchase_items WHERE product_id=?', [$p['id']]);
                 ?><tr>
                     <td class="small fw-semibold"><?= e($p['name']) ?></td><td class="small"><?= e($p['sku']) ?></td>
                     <td class="small"><?= e($p['category_name']) ?></td><td class="small"><?= e($p['size']) ?></td>
+                    <td class="small"><?php if ($p['variant_count']): ?><span class="badge bg-light text-dark"><?= (int)$p['variant_count'] ?> ukuran</span><div class="small text-muted"><?= rupiah($p['variant_min']) ?>–<?= rupiah($p['variant_max']) ?></div><?php else: ?>—<?php endif; ?></td>
                     <td class="text-end small"><?= rupiah($p['price']) ?></td>
                     <td class="text-end small"><?= rupiah($p['cost']) ?></td>
                     <td class="text-end"><span class="badge bg-<?= $p['stock'] <= $p['min_stock'] ? 'danger' : 'success' ?>"><?= angka($p['stock']).' '.e($p['unit']) ?></span></td>

@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../includes/sm_import.php';
 require_login();
 require_unit('smcorner');
+sm_import_ensure_schema();
 
 $title = 'Kasir POS – SM Corner';
 $activeUnit = 'smcorner';
@@ -19,12 +21,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $items = [];
     foreach ($cart as $c) {
-        $pid = (int)($c['id'] ?? 0); $qty = (int)($c['qty'] ?? 0);
+        $pid = (int)($c['id'] ?? 0); $vid = (int)($c['variant_id'] ?? 0); $qty = (int)($c['qty'] ?? 0);
         if ($pid < 1 || $qty < 1) continue;
         $p = row('SELECT * FROM sm_products WHERE id=?', [$pid]);
         if (!$p) continue;
-        if ($qty > (int)$p['stock']) { $errors[] = 'Stok '.$p['name'].' tidak mencukupi.'; continue; }
-        $items[] = ['product'=>$p, 'qty'=>$qty, 'subtotal'=>(float)$p['price']*$qty];
+        $price = (float)$p['price']; $stock = (int)$p['stock']; $size = (string)$p['size'];
+        if ($vid > 0) {
+            $v = row('SELECT * FROM sm_product_variants WHERE id=? AND product_id=?', [$vid, $pid]);
+            if (!$v) continue;
+            $price = (float)$v['price']; $stock = (int)$v['stock']; $size = (string)$v['size_name'];
+        }
+        if ($qty > $stock) { $errors[] = 'Stok '.$p['name'].' ('.$size.') tidak mencukupi.'; continue; }
+        $items[] = ['product'=>$p, 'variant_id'=>$vid, 'size'=>$size, 'price'=>$price, 'qty'=>$qty, 'subtotal'=>$price*$qty];
     }
     if (!$items) $errors[] = 'Keranjang masih kosong.';
 
@@ -36,7 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             run('INSERT INTO sm_transactions (transaction_no,transaction_date,customer_name,payment_method,total_amount,user_id,created_at) VALUES (?,NOW(),?,?,?,?,NOW())', [$no,$customer,$method,$total,current_user()['id']]);
             $trxId = last_id();
             foreach ($items as $it) {
-                run('INSERT INTO sm_transaction_items (transaction_id,product_id,quantity,unit_price,unit_cost,subtotal) VALUES (?,?,?,?,?,?)', [$trxId,$it['product']['id'],$it['qty'],$it['product']['price'],$it['product']['cost'],$it['subtotal']]);
+                run('INSERT INTO sm_transaction_items (transaction_id,product_id,variant_id,quantity,unit_price,unit_cost,subtotal) VALUES (?,?,?,?,?,?,?)', [$trxId,$it['product']['id'],$it['variant_id'] ?: null,$it['qty'],$it['price'],$it['product']['cost'],$it['subtotal']]);
+                if ($it['variant_id']) run('UPDATE sm_product_variants SET stock = stock - ? WHERE id=?', [$it['qty'],$it['variant_id']]);
                 run('UPDATE sm_products SET stock = stock - ? WHERE id=?', [$it['qty'],$it['product']['id']]);
             }
             $pdo->commit();
@@ -50,6 +59,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $products = all('SELECT * FROM sm_products WHERE stock > 0 ORDER BY name');
 $cats = all('SELECT * FROM sm_categories ORDER BY name');
+$variantRows = all('SELECT v.*, p.name product_name, p.sku FROM sm_product_variants v JOIN sm_products p ON p.id=v.product_id WHERE v.stock > 0 ORDER BY p.name, v.size_name');
+$variantByProduct = [];
+foreach ($variantRows as $v) $variantByProduct[$v['product_id']][] = $v;
+$saleUnits = [];
+foreach ($products as $p) {
+    if (!empty($variantByProduct[$p['id']])) {
+        foreach ($variantByProduct[$p['id']] as $v) {
+            $saleUnits[] = ['product_id'=>$p['id'], 'variant_id'=>$v['id'], 'name'=>$p['name'], 'sku'=>$p['sku'],
+                'size'=>$v['size_name'], 'price'=>(float)$v['price'], 'stock'=>(int)$v['stock'], 'category_id'=>$p['category_id']];
+        }
+    } else {
+        $saleUnits[] = ['product_id'=>$p['id'], 'variant_id'=>0, 'name'=>$p['name'], 'sku'=>$p['sku'],
+            'size'=>$p['size'], 'price'=>(float)$p['price'], 'stock'=>(int)$p['stock'], 'category_id'=>$p['category_id']];
+    }
+}
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -69,7 +93,7 @@ require_once __DIR__ . '/../../includes/header.php';
     <hr>
     <div class="small">Pelanggan: <?= e($receipt['customer']) ?> &nbsp;|&nbsp; Bayar: <?= e(strtoupper($receipt['method'])) ?></div>
     <hr>
-    <?php foreach ($receiptItems as $it): ?><div class="d-flex justify-content-between small"><span><?= e($it['product']['name']).' × '.$it['qty'] ?></span><span><?= rupiah($it['subtotal']) ?></span></div><?php endforeach; ?>
+    <?php foreach ($receiptItems as $it): ?><div class="d-flex justify-content-between small"><span><?= e($it['product']['name']).' ('.e($it['size']).') × '.$it['qty'] ?></span><span><?= rupiah($it['subtotal']) ?></span></div><?php endforeach; ?>
     <hr>
     <div class="d-flex justify-content-between fw-bold"><span>TOTAL</span><span><?= rupiah($receipt['total']) ?></span></div>
     <div class="text-center small mt-3">Terima kasih telah berbelanja</div>
@@ -82,17 +106,18 @@ require_once __DIR__ . '/../../includes/header.php';
             <div class="card-header"><input type="text" id="searchProduct" class="form-control form-control-sm" placeholder="🔍 Cari nama atau kode barang..."></div>
             <div class="card-body">
                 <?php foreach ($cats as $cat):
-                    $items = array_filter($products, fn($p) => $p['category_id'] == $cat['id']);
+                    $items = array_filter($saleUnits, fn($u) => $u['category_id'] == $cat['id']);
                     if (!$items) continue; ?>
                     <div class="small fw-bold text-muted mb-2 mt-3"><?= e(strtoupper($cat['name'])) ?></div>
                     <div class="row g-2">
-                        <?php foreach ($items as $p): ?>
+                        <?php foreach ($items as $u): ?>
                             <div class="col-6 col-md-4">
-                                <div class="pos-product h-100 add-product" data-id="<?= $p['id'] ?>" data-name="<?= e($p['name']) ?>" data-price="<?= (float)$p['price'] ?>">
-                                    <div class="pos-name"><?= e($p['name']) ?></div>
-                                    <div class="small text-muted"><?= e($p['sku']) ?> · <?= e($p['size']) ?></div>
-                                    <div class="pos-price mt-2"><?= rupiah($p['price']) ?></div>
-                                    <div class="small text-muted">Stok: <?= angka($p['stock']) ?></div>
+                                <div class="pos-product h-100 add-product" data-id="<?= $u['product_id'] ?>" data-variant="<?= $u['variant_id'] ?>"
+                                     data-name="<?= e($u['name']) ?>" data-sku="<?= e($u['sku']) ?>" data-size="<?= e($u['size']) ?>" data-price="<?= $u['price'] ?>">
+                                    <div class="pos-name"><?= e($u['name']) ?></div>
+                                    <div class="small text-muted"><?= e($u['sku']) ?> · <?= e($u['size']) ?></div>
+                                    <div class="pos-price mt-2"><?= rupiah($u['price']) ?></div>
+                                    <div class="small text-muted">Stok: <?= angka($u['stock']) ?></div>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -134,7 +159,7 @@ require_once __DIR__ . '/../../includes/header.php';
             box.innerHTML = cart.map(function (it, i) {
                 total += it.price * it.qty; count += it.qty;
                 return '<div class="cart-row d-flex justify-content-between align-items-center">' +
-                    '<div class="small"><b>' + it.name + '</b><br>' + money(it.price) + ' × ' + it.qty + '</div>' +
+                    '<div class="small"><b>' + it.name + (it.size ? ' (' + it.size + ')' : '') + '</b><br>' + money(it.price) + ' × ' + it.qty + '</div>' +
                     '<div class="btn-group btn-group-sm"><button type="button" class="btn btn-outline-secondary" data-act="minus" data-i="' + i + '">−</button><button type="button" class="btn btn-outline-secondary" data-act="plus" data-i="' + i + '">+</button><button type="button" class="btn btn-outline-danger" data-act="del" data-i="' + i + '">×</button></div></div>';
             }).join('');
         }
@@ -154,9 +179,10 @@ require_once __DIR__ . '/../../includes/header.php';
     }
     document.querySelectorAll('.add-product').forEach(function (el) {
         el.addEventListener('click', function () {
-            var id = +el.dataset.id;
-            var found = cart.find(function (x) { return x.id === id; });
-            if (found) found.qty++; else cart.push({ id: id, name: el.dataset.name, price: +el.dataset.price, qty: 1 });
+            var id = +el.dataset.id, vid = +el.dataset.variant || 0;
+            var found = cart.find(function (x) { return x.id === id && x.variant_id === vid; });
+            if (found) found.qty++;
+            else cart.push({ id: id, variant_id: vid, name: el.dataset.name, size: el.dataset.size, price: +el.dataset.price, qty: 1 });
             render();
         });
     });
@@ -164,7 +190,8 @@ require_once __DIR__ . '/../../includes/header.php';
     document.getElementById('searchProduct').addEventListener('input', function () {
         var q = this.value.toLowerCase();
         document.querySelectorAll('.add-product').forEach(function (el) {
-            el.parentElement.style.display = (el.dataset.name + ' ' + el.querySelector('.small').textContent).toLowerCase().indexOf(q) > -1 ? '' : 'none';
+            var text = (el.dataset.name + ' ' + el.dataset.sku + ' ' + el.dataset.size).toLowerCase();
+            el.parentElement.style.display = text.indexOf(q) > -1 ? '' : 'none';
         });
     });
     render();

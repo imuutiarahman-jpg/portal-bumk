@@ -321,6 +321,136 @@ function sheet_fetch_csv(string $exportUrl): array
     return [$content, ''];
 }
 
+/* ---------- Google Sheets XLSX helper (import seluruh tab) ---------- */
+
+/** Ubah link edit Google Sheets menjadi URL ekspor XLSX (semua tab). */
+function sheet_xlsx_url(string $url): array
+{
+    $url = trim($url);
+    if ($url === '') return [null, '', ''];
+    $parts = parse_url($url);
+    if (!$parts || strtolower($parts['scheme'] ?? '') !== 'https') {
+        return [null, '', 'Link harus diawali https://'];
+    }
+    $host = strtolower($parts['host'] ?? '');
+    if (!in_array($host, ['docs.google.com', 'www.docs.google.com'], true)) {
+        return [null, '', 'Hanya link Google Sheets (docs.google.com) yang didukung.'];
+    }
+    if (!preg_match('#/spreadsheets/d/([A-Za-z0-9_-]+)#', $parts['path'] ?? '', $m)) {
+        return [null, '', 'ID sheet tidak ditemukan dalam link.'];
+    }
+    return ['https://docs.google.com/spreadsheets/d/' . $m[1] . '/export?format=xlsx', $m[1], ''];
+}
+
+/** Unduh XLSX ke file sementara. Return [path, error]. */
+function sheet_fetch_xlsx(string $exportUrl): array
+{
+    if (!function_exists('curl_init')) return [null, 'cURL tidak tersedia di server XAMPP.'];
+    $ch = curl_init($exportUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+        CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => 30,
+        CURLOPT_USERAGENT => 'Portal-BUMK-UMGO-Import/1.0',
+        CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+    ]);
+    $content = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    if ($content === false) return [null, 'Gagal mengambil sheet: ' . $err];
+    if ($code !== 200) return [null, 'Google mengembalikan HTTP ' . $code . '.'];
+    if (strlen($content) > 20 * 1024 * 1024) return [null, 'File XLSX terlalu besar (maksimal 20 MB).'];
+    if (strncmp($content, 'PK', 2) !== 0) {
+        return [null, 'File yang diunduh bukan XLSX. Pastikan Sharing = "Siapa pun yang memiliki link" (Viewer).'];
+    }
+    $tmp = tempnam(sys_get_temp_dir(), 'sm_full_');
+    if ($tmp === false || file_put_contents($tmp, $content) === false) return [null, 'Gagal menyimpan file sementara.'];
+    return [$tmp, ''];
+}
+
+/** Ambil semua teks dari elemen <is>/<si>, termasuk rich text <r><t>. */
+function sheet_xlsx_text(SimpleXMLElement $node, string $nsUri): string
+{
+    $text = '';
+    foreach ($node->children($nsUri) as $child) {
+        if ($child->getName() === 't') $text .= (string) $child;
+        elseif ($child->getName() === 'r') $text .= sheet_xlsx_text($child, $nsUri);
+    }
+    return $text;
+}
+
+/**
+ * Baca seluruh tab dari file XLSX.
+ * Return: [ ['name' => ..., 'rows' => [ ['A' => val, 'B' => val], ... ]], ... ]
+ */
+function sheet_read_xlsx(string $path): array
+{
+    if (!class_exists('ZipArchive')) return [];
+    $zip = new ZipArchive();
+    if ($zip->open($path) !== true) return [];
+
+    $nsUri = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    $shared = [];
+    $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+    if ($ssXml !== false) {
+        $ss = simplexml_load_string($ssXml);
+        if ($ss !== false) {
+            foreach ($ss->si as $si) {
+                $shared[] = sheet_xlsx_text($si, $nsUri);
+            }
+        }
+    }
+
+    $wbXml = $zip->getFromName('xl/workbook.xml');
+    $relXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
+    if ($wbXml === false || $relXml === false) { $zip->close(); return []; }
+    $wb = simplexml_load_string($wbXml);
+    $rels = simplexml_load_string($relXml);
+    if ($wb === false || $rels === false) { $zip->close(); return []; }
+
+    $targets = [];
+    foreach ($rels->Relationship as $rel) {
+        $targets[(string) $rel['Id']] = ltrim((string) $rel['Target'], '/');
+    }
+
+    $out = [];
+    foreach ($wb->sheets->sheet as $sheet) {
+        $rAttrs = $sheet->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships');
+        $rid = (string) ($rAttrs['id'] ?? '');
+        $target = $targets[$rid] ?? '';
+        if ($target === '') continue;
+        if (strpos($target, 'xl/') !== 0) $target = 'xl/' . $target;
+        $xml = $zip->getFromName($target);
+        if ($xml === false) continue;
+        $sx = simplexml_load_string($xml);
+        if ($sx === false) continue;
+
+        $rows = [];
+        foreach ($sx->sheetData->row as $r) {
+            $cells = [];
+            foreach ($r->c as $c) {
+                $col = preg_replace('/\d+/', '', (string) $c['r']);
+                $type = (string) $c['t'];
+                $hasV = isset($c->v);
+                if ($type === 's' && $hasV) {
+                    $val = $shared[(int) $c->v] ?? '';
+                } elseif (isset($c->is)) {
+                    $val = sheet_xlsx_text($c->is, $nsUri);
+                } elseif ($hasV && (string) $c->v !== '') {
+                    $val = (string) $c->v; // sel rumus tanpa cache tetap diambil apa adanya
+                } else {
+                    $val = '';
+                }
+                $cells[$col] = $val;
+            }
+            $rows[] = $cells;
+        }
+        $out[] = ['name' => (string) $sheet['name'], 'rows' => $rows];
+    }
+    $zip->close();
+    return $out;
+}
+
 /* ---------- Chart helper ---------- */
 
 function chart(string $type, array $labels, array $datasets, string $class = ''): string

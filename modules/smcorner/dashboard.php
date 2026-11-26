@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../includes/sm_import.php';
 require_login();
 require_unit('smcorner');
+sm_import_ensure_schema();
 
 $title = 'Dashboard SM Corner';
 $activeUnit = 'smcorner';
@@ -10,7 +12,8 @@ $salesToday = val('SELECT COALESCE(SUM(total_amount),0) FROM sm_transactions WHE
 $salesMonth = val('SELECT COALESCE(SUM(total_amount),0) FROM sm_transactions WHERE DATE_FORMAT(transaction_date,"%Y-%m")=DATE_FORMAT(CURDATE(),"%Y-%m")');
 $bestSeller = row('SELECT p.name, SUM(i.quantity) qty FROM sm_transaction_items i JOIN sm_products p ON p.id=i.product_id GROUP BY p.id ORDER BY qty DESC LIMIT 1');
 $lowCount   = val('SELECT COUNT(*) FROM sm_products WHERE stock <= min_stock');
-$inventory  = val('SELECT COALESCE(SUM(stock*price),0) FROM sm_products');
+$inventory  = val('SELECT COALESCE(SUM(stock*price),0) FROM sm_product_variants');
+if (!$inventory) $inventory = val('SELECT COALESCE(SUM(stock*price),0) FROM sm_products');
 $purchaseMonth = val('SELECT COALESCE(SUM(total_amount),0) FROM sm_purchases WHERE DATE_FORMAT(purchase_date,"%Y-%m")=DATE_FORMAT(CURDATE(),"%Y-%m")');
 $sheetValue = val('SELECT inventory_value FROM sm_catalog_summary WHERE is_total=1 ORDER BY id DESC LIMIT 1');
 

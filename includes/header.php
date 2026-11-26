@@ -26,7 +26,7 @@ $unitMenus = [
         'kasir.php'     => 'Kasir POS',
         'laporan.php'       => 'Laporan',
         'rekap.php'         => 'Rekap Bulanan',
-        'import_katalog.php'=> 'Import Katalog Sheet',
+        'import_katalog.php'=> 'Import Katalog Lengkap',
     ],
     'daqam' => [
         'dashboard.php'  => 'Dashboard',
