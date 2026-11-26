@@ -15,6 +15,7 @@ Unit usaha: **Qmas Air Mineral**, **Suara Muhammadiyah (SM) Corner**, **Daqam Ca
    (File ini otomatis membuat database `bumk_umgo`, tabel, dan data contoh.)
    > Jika database sudah terisi dari versi sebelumnya, import juga `sql/update_payment_status.sql` (cukup sekali). Script ini mengubah status `lunas` lama menjadi `tunai` dan menambah kolom `bank`, tanpa menghapus data.
    > Untuk data yang sudah memakai `opening_stock`, jalankan juga `sql/update_qmas_opening_stock_date.sql` (cukup sekali). Script ini menambah kolom `opening_stock_date`, mengisi stok awal penyeimbang, lalu menghitung ulang stok.
+   > Jalankan pula `sql/update_qmas_pembelian_lunas.sql` (cukup sekali) untuk menambah kolom `lunas_date` pada nota pembelian, agar piutang ke supplier bisa dilunasi.
 4. Pastikan folder ini berada di `C:\xampp\htdocs\portal-bumk`.
 5. Buka di browser: **http://localhost/portal-bumk/**
 
@@ -75,7 +76,7 @@ Portal Utama (landing: header 80px, hero 280px, 3 kartu unit, footer 70px)
 - **Hapus Data per Bulan**: pilih periode `YYYY-MM`, konfirmasi dengan mengetik periode tersebut; menghapus seluruh transaksi & pembelian bulan itu dan menyetel stok semua produk Qmas menjadi 0 (cocok untuk mengosongkan data Qmas)
 - Status bayar: **Tunai / Transfer / Piutang**. Saat memilih **Transfer**, muncul pilihan bank **BSI** atau **Muamalat** (wajib). Piutang bisa dilunasi lewat form pilihan metode + bank.
 - Stok kemasan (GL 19L, 240ml, 330ml, 600ml, 1.5L) + pencatatan tukar galon kosong + HPP per produk
-- **Pembelian / Stok Masuk** (menu terpisah): catat nota pembelian dari supplier (tanggal, no. invoice, multi-produk, qty, harga beli, status bayar Tunai/Transfer/Piutang + bank). Saat disimpan, **stok bertambah** dan **HPP produk diubah ke harga beli terakhir**; riwayat & ringkasan harian/bulanan tersedia di halaman yang sama
+- **Pembelian / Stok Masuk** (menu terpisah): catat nota pembelian dari supplier (tanggal, no. invoice, multi-produk, qty, harga beli, status bayar Tunai/Transfer/Piutang + bank). Saat disimpan, **stok bertambah** dan **HPP produk diubah ke harga beli terakhir**; riwayat & ringkasan harian/bulanan tersedia di halaman yang sama. Nota berstatus **Piutang** bisa diklik **Lunas** (Tunai/Transfer + bank); dashboard menampilkan kartu **Piutang Pembelian** (hutang ke supplier) yang berkurang otomatis setelah pelunasan
 - Kelola produk di menu **Stok & Galon**: tambah, **Ubah** lewat popup (nama, SKU, jenis, ukuran, harga, HPP, stok, min stok, satuan), dan **Hapus permanen**
   - Tombol aksi memakai **tulisan**: **Ubah** dan **Hapus** (tidak lagi ikon saja).
   - **Hapus permanen**: hanya untuk produk yang **belum pernah dipakai transaksi**; konfirmasi harus **mengetik nama produk persis**. Produk yang sudah dipakai transaksi ditolak agar riwayat omzet/laba tidak rusak (foreign key `RESTRICT`). Tidak ada lagi tombol Nonaktifkan.
@@ -128,6 +129,7 @@ portal-bumk/
     ├── reactivate_qmas_products.sql
     ├── update_qmas_pembelian.sql    # tabel pembelian / stok masuk (Qmas)
     ├── update_qmas_opening_stock_date.sql  # tanggal stok awal + angka penyeimbang
+    ├── update_qmas_pembelian_lunas.sql     # kolom lunas_date nota pembelian
     └── update_smcorner_lengkap.sql  # HPP + pembelian SM Corner
 ```
 

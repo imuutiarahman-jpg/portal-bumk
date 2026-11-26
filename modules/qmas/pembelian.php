@@ -10,6 +10,24 @@ $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
+    if (($_POST['action'] ?? '') === 'lunas') {
+        $id = (int) ($_POST['id'] ?? 0);
+        $method = $_POST['pay_method'] ?? 'tunai';
+        if (!in_array($method, ['tunai', 'transfer'], true)) $errors[] = 'Metode pelunasan tidak valid.';
+        $bank = payment_bank($method, $_POST['bank'] ?? null);
+        if ($method === 'transfer' && $bank === null) $errors[] = 'Bank untuk transfer wajib dipilih (BSI / Muamalat).';
+        $p = $id > 0 ? row('SELECT * FROM qmas_purchases WHERE id=? AND payment_status="piutang"', [$id]) : null;
+        if (!$p) $errors[] = 'Nota piutang tidak ditemukan atau sudah lunas.';
+        if (!$errors) {
+            run('UPDATE qmas_purchases SET payment_status=?, bank=?, lunas_date=NOW() WHERE id=?', [$method, $bank, $id]);
+            activity('qmas', 'Lunasi nota pembelian ' . $p['purchase_no'] . ' via ' . payment_label($method, $bank));
+            flash_set('success', 'Nota ' . $p['purchase_no'] . ' berhasil dilunasi via ' . payment_label($method, $bank) . '.');
+        } else {
+            foreach ($errors as $err) flash_set('danger', $err);
+        }
+        redirect('/modules/qmas/pembelian.php');
+    }
+
     if (($_POST['action'] ?? '') === 'hapus') {
         $id = (int) ($_POST['id'] ?? 0);
         $typed = clean($_POST['confirm_no'] ?? '');
@@ -193,6 +211,13 @@ require_once __DIR__ . '/../../includes/header.php';
                         <td><span class="badge bg-<?= payment_badge($p['payment_status']) ?>"><?= e(payment_label($p['payment_status'], $p['bank'])) ?></span></td>
                         <td class="text-nowrap">
                             <a href="<?= base_url('/modules/qmas/pembelian.php?detail='.$p['id']) ?>" class="btn btn-sm btn-outline-primary py-0">Detail</a>
+                            <?php if ($p['payment_status'] === 'piutang'): ?>
+                            <button type="button" class="btn btn-sm btn-outline-success py-0 btn-lunas"
+                                data-id="<?= $p['id'] ?>"
+                                data-no="<?= e($p['purchase_no']) ?>"
+                                data-supplier="<?= e($p['supplier_name']) ?>"
+                                data-total="<?= e(rupiah($p['total_amount'])) ?>">Lunas</button>
+                            <?php endif; ?>
                             <form method="post" class="d-inline" onsubmit="return hapusNota(this, '<?= e(addslashes($p['purchase_no'])) ?>');">
                                 <?php csrf_field(); ?>
                                 <input type="hidden" name="action" value="hapus">
@@ -207,6 +232,43 @@ require_once __DIR__ . '/../../includes/header.php';
             </table></div>
         </div>
     </div>
+</div>
+
+<!-- Modal pelunasan nota pembelian -->
+<div class="modal fade" id="lunasModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="post">
+            <?php csrf_field(); ?>
+            <input type="hidden" name="action" value="lunas">
+            <input type="hidden" name="id" id="lunasId">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-cash-coin"></i> Lunasi Nota Pembelian</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-light py-2 small mb-3">Nota: <b id="lunasNo"></b><br>Supplier: <b id="lunasSupplier"></b><br>Total: <b id="lunasTotal"></b></div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Metode Pembayaran</label>
+                    <select name="pay_method" id="lunasMethod" class="form-select">
+                        <option value="tunai">Tunai</option>
+                        <option value="transfer">Transfer</option>
+                    </select>
+                </div>
+                <div id="lunasBankWrap" style="display:none">
+                    <label class="form-label small fw-semibold">Bank Transfer</label>
+                    <select name="bank" id="lunasBank" class="form-select">
+                        <option value="">-- Pilih Bank --</option>
+                        <option value="BSI">BSI</option>
+                        <option value="MUAMALAT">Muamalat</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-sm btn-success fw-bold"><i class="bi bi-check2-circle"></i> Simpan Pelunasan</button>
+            </div>
+        </form>
+    </div></div>
 </div>
 
 <script>
@@ -232,6 +294,35 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     payStatus.addEventListener('change', toggleBank);
     toggleBank();
+
+    // Pelunasan nota pembelian
+    var lunasMethod = document.getElementById('lunasMethod');
+    var lunasBankWrap = document.getElementById('lunasBankWrap');
+    var lunasBank = document.getElementById('lunasBank');
+    function toggleLunasBank() {
+        var isTransfer = lunasMethod.value === 'transfer';
+        lunasBankWrap.style.display = isTransfer ? '' : 'none';
+        lunasBank.required = isTransfer;
+        if (!isTransfer) lunasBank.value = '';
+    }
+    lunasMethod.addEventListener('change', toggleLunasBank);
+    toggleLunasBank();
+
+    if (typeof bootstrap !== 'undefined') {
+        var lunasModal = new bootstrap.Modal(document.getElementById('lunasModal'));
+        document.querySelectorAll('.btn-lunas').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                document.getElementById('lunasId').value = btn.dataset.id;
+                document.getElementById('lunasNo').textContent = btn.dataset.no;
+                document.getElementById('lunasSupplier').textContent = btn.dataset.supplier;
+                document.getElementById('lunasTotal').textContent = btn.dataset.total;
+                lunasMethod.value = 'tunai';
+                lunasBank.value = '';
+                toggleLunasBank();
+                lunasModal.show();
+            });
+        });
+    }
 
     var wrap = document.getElementById('itemRows');
     document.getElementById('addRow').addEventListener('click', function () {

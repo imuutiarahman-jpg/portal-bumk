@@ -132,8 +132,12 @@ if (!empty($_GET['detail'])) {
 
 $filterStatus = $_GET['status'] ?? '';
 if (!in_array($filterStatus, ['tunai', 'transfer', 'piutang'], true)) $filterStatus = '';
-$where = $filterStatus ? 'WHERE payment_status = ?' : '';
-$params = $filterStatus ? [$filterStatus] : [];
+$q = trim(clean($_GET['q'] ?? ''));
+$conditions = [];
+$params = [];
+if ($filterStatus) { $conditions[] = 'payment_status = ?'; $params[] = $filterStatus; }
+if ($q !== '')      { $conditions[] = 'customer_name LIKE ?'; $params[] = '%' . $q . '%'; }
+$where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
 $list = all('SELECT * FROM qmas_transactions ' . $where . ' ORDER BY transaction_date DESC LIMIT 50', $params);
 $products = all('SELECT * FROM qmas_products WHERE is_active=1 ORDER BY name');
 
@@ -220,13 +224,22 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="card content-card">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span>Riwayat Transaksi <small class="text-muted fw-normal">(50 terbaru)</small> · <a href="<?= base_url('/modules/qmas/rekap.php') ?>" class="small">Lihat Rekap →</a></span>
-                <div class="btn-group btn-group-sm">
-                    <a href="<?= base_url('/modules/qmas/transaksi.php') ?>" class="btn btn-outline-secondary <?= $filterStatus===''?'active':'' ?>">Semua</a>
-                    <a href="<?= base_url('/modules/qmas/transaksi.php?status=tunai') ?>" class="btn btn-outline-success <?= $filterStatus==='tunai'?'active':'' ?>">Tunai</a>
-                    <a href="<?= base_url('/modules/qmas/transaksi.php?status=transfer') ?>" class="btn btn-outline-primary <?= $filterStatus==='transfer'?'active':'' ?>">Transfer</a>
-                    <a href="<?= base_url('/modules/qmas/transaksi.php?status=piutang') ?>" class="btn btn-outline-warning <?= $filterStatus==='piutang'?'active':'' ?>">Piutang</a>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <form method="get" class="d-flex gap-1">
+                        <?php if ($filterStatus): ?><input type="hidden" name="status" value="<?= e($filterStatus) ?>"><?php endif; ?>
+                        <input type="text" name="q" class="form-control form-control-sm" style="width:190px" placeholder="Cari nama pelanggan..." value="<?= e($q) ?>">
+                        <button class="btn btn-sm btn-outline-primary" title="Cari"><i class="bi bi-search"></i></button>
+                        <?php if ($q !== ''): ?><a href="<?= base_url('/modules/qmas/transaksi.php' . ($filterStatus ? '?status=' . e($filterStatus) : '')) ?>" class="btn btn-sm btn-outline-secondary">Reset</a><?php endif; ?>
+                    </form>
+                    <div class="btn-group btn-group-sm">
+                        <a href="<?= base_url('/modules/qmas/transaksi.php' . ($q !== '' ? '?q=' . urlencode($q) : '')) ?>" class="btn btn-outline-secondary <?= $filterStatus===''?'active':'' ?>">Semua</a>
+                        <a href="<?= base_url('/modules/qmas/transaksi.php?status=tunai' . ($q !== '' ? '&q=' . urlencode($q) : '')) ?>" class="btn btn-outline-success <?= $filterStatus==='tunai'?'active':'' ?>">Tunai</a>
+                        <a href="<?= base_url('/modules/qmas/transaksi.php?status=transfer' . ($q !== '' ? '&q=' . urlencode($q) : '')) ?>" class="btn btn-outline-primary <?= $filterStatus==='transfer'?'active':'' ?>">Transfer</a>
+                        <a href="<?= base_url('/modules/qmas/transaksi.php?status=piutang' . ($q !== '' ? '&q=' . urlencode($q) : '')) ?>" class="btn btn-outline-warning <?= $filterStatus==='piutang'?'active':'' ?>">Piutang</a>
+                    </div>
                 </div>
             </div>
+            <?php if ($q !== ''): ?><div class="card-body py-2 border-bottom small text-muted">Menampilkan <?= count($list) ?> transaksi untuk "<b><?= e($q) ?></b>"<?= $filterStatus ? ' · status ' . e($filterStatus) : '' ?></div><?php endif; ?>
             <div class="table-responsive">
                 <table class="table table-sm table-hover mb-0 align-middle">
                     <thead class="table-light"><tr><th>No. Transaksi</th><th>Tanggal</th><th>Pelanggan</th><th class="text-end">Total</th><th>Status</th><th></th></tr></thead>

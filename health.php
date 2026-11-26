@@ -46,8 +46,9 @@ if ($pdo) {
         hrow('Tabel ' . $t, (bool) $n->fetchColumn());
     }
     $cols = [
-        'qmas_products' => ['cost', 'is_active'],
+        'qmas_products' => ['cost', 'is_active', 'opening_stock', 'opening_stock_date'],
         'qmas_transactions' => ['bank', 'lunas_date', 'setor_date', 'import_batch'],
+        'qmas_purchases' => ['lunas_date'],
         'qmas_transaction_items' => ['unit_cost'],
         'sm_products' => ['cost'],
         'sm_transaction_items' => ['unit_cost'],

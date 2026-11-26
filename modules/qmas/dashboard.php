@@ -14,6 +14,10 @@ $dusToday   = val('SELECT COALESCE(SUM(i.quantity),0) FROM qmas_transaction_item
 $stokTotal  = val('SELECT COALESCE(SUM(stock),0) FROM qmas_products WHERE is_active=1');
 $piutang    = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE payment_status="piutang"');
 $piutangLunas = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE payment_status="piutang" AND lunas_date IS NOT NULL');
+// Hutang ke supplier/perusahaan saat pengambilan stok (piutang pembelian).
+$hutangStok      = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_purchases WHERE payment_status="piutang" AND lunas_date IS NULL');
+$hutangStokNota  = (int) val('SELECT COUNT(*) FROM qmas_purchases WHERE payment_status="piutang" AND lunas_date IS NULL');
+$hutangStokLunas = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_purchases WHERE lunas_date IS NOT NULL');
 
 $recent = all('SELECT * FROM qmas_transactions ORDER BY transaction_date DESC LIMIT 8');
 $lowStock = all('SELECT * FROM qmas_products WHERE is_active=1 AND stock <= min_stock ORDER BY stock ASC');
@@ -40,11 +44,12 @@ require_once __DIR__ . '/../../includes/header.php';
     <a href="<?= base_url('/modules/qmas/transaksi.php') ?>" class="btn btn-sm text-white" style="background:var(--qmas)"><i class="bi bi-plus-lg"></i> Transaksi Baru</a>
 </div>
 
-<div class="row g-3 mb-4">
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET HARI INI</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value" style="color:var(--qmas)"><?= rupiah($omzetToday) ?></div><div class="kpi-foot">Total piutang <?= rupiah($piutang) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">GALON TERJUAL</span><span class="kpi-icon bg-info-subtle text-info"><i class="bi bi-droplet"></i></span></div><div class="kpi-value"><?= angka($galonToday) ?> <small class="fs-6 text-muted">galon</small></div><div class="kpi-foot">Penjualan galon hari ini</div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">DUS TERJUAL</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-box-seam"></i></span></div><div class="kpi-value"><?= angka($dusToday) ?> <small class="fs-6 text-muted">dus</small></div><div class="kpi-foot">Penjualan dus hari ini</div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">SISA STOK GUDANG</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-archive"></i></span></div><div class="kpi-value"><?= angka($stokTotal) ?> <small class="fs-6 text-muted">unit</small></div><?php if ($lowStock): ?><div class="kpi-trend danger"><i class="bi bi-exclamation-triangle"></i> <?= count($lowStock) ?> produk menipis</div><?php else: ?><div class="kpi-trend"><i class="bi bi-check-circle"></i> Semua stok aman</div><?php endif; ?></div></div>
+<div class="row g-3 mb-4 row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-5">
+    <div class="col"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET HARI INI</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value" style="color:var(--qmas)"><?= rupiah($omzetToday) ?></div><div class="kpi-foot">Piutang pelanggan <?= rupiah($piutang) ?></div></div></div>
+    <div class="col"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">GALON TERJUAL</span><span class="kpi-icon bg-info-subtle text-info"><i class="bi bi-droplet"></i></span></div><div class="kpi-value"><?= angka($galonToday) ?> <small class="fs-6 text-muted">galon</small></div><div class="kpi-foot">Penjualan galon hari ini</div></div></div>
+    <div class="col"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">DUS TERJUAL</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-box-seam"></i></span></div><div class="kpi-value"><?= angka($dusToday) ?> <small class="fs-6 text-muted">dus</small></div><div class="kpi-foot">Penjualan dus hari ini</div></div></div>
+    <div class="col"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">SISA STOK GUDANG</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-archive"></i></span></div><div class="kpi-value"><?= angka($stokTotal) ?> <small class="fs-6 text-muted">unit</small></div><?php if ($lowStock): ?><div class="kpi-trend danger"><i class="bi bi-exclamation-triangle"></i> <?= count($lowStock) ?> produk menipis</div><?php else: ?><div class="kpi-trend"><i class="bi bi-check-circle"></i> Semua stok aman</div><?php endif; ?></div></div>
+    <div class="col"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PIUTANG PEMBELIAN</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-wallet2"></i></span></div><div class="kpi-value text-warning"><?= rupiah($hutangStok) ?></div><div class="kpi-foot"><?= angka($hutangStokNota) ?> nota belum dibayar</div><div class="kpi-foot">Sudah lunas: <?= rupiah($hutangStokLunas) ?></div></div></div>
 </div>
 
 <div class="row g-3 mb-4">

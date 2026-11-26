@@ -127,6 +127,7 @@ CREATE TABLE `qmas_purchases` (
     `supplier_name` VARCHAR(120) NOT NULL,
     `payment_status` ENUM('tunai','transfer','piutang') NOT NULL DEFAULT 'tunai',
     `bank` ENUM('BSI','MUAMALAT') NULL DEFAULT NULL,
+    `lunas_date` DATETIME NULL,
     `total_amount` DECIMAL(12,2) NOT NULL DEFAULT 0,
     `notes` VARCHAR(255) NULL,
     `user_id` INT NULL,
