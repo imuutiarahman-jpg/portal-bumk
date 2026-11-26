@@ -52,7 +52,7 @@ $compLabels = []; $compData = [];
 foreach ($comp as $c) { $compLabels[] = payment_label($c['status'], $c['bank']); $compData[] = (float) $c['total']; }
 
 $unitLabels = []; $unitData = []; $unitColors = [];
-foreach ($omzet as $o) { $u = unit_by_code($o['code']); $unitLabels[] = $u['name'] ?? $o['code']; $unitData[] = (float) $o['today']; $unitColors[] = $u['color'] ?? '#0B4F3E'; }
+foreach ($omzet as $o) { $u = unit_by_code($o['code']); $unitLabels[] = $u['name'] ?? $o['code']; $unitData[] = (float) $o['today']; $unitColors[] = '#0E9F90'; }
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -103,7 +103,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <span><?= rupiah($o['today']) ?></span>
                         </div>
                         <div class="progress" style="height:10px">
-                            <div class="progress-bar" role="progressbar" style="width:<?= min(100, $pct) ?>%;background:<?= e($u['color'] ?? '#0B4F3E') ?>"></div>
+                            <div class="progress-bar" role="progressbar" style="width:<?= min(100, $pct) ?>%"></div>
                         </div>
                         <div class="small text-muted mt-1">Bulan ini <?= rupiah($o['month']) ?> · <?= angka($o['trx']) ?> transaksi</div>
                     </div>
@@ -123,7 +123,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <?php if (!$recent): ?><tr><td colspan="6" class="empty-state">Belum ada transaksi.</td></tr><?php endif; ?>
                     <?php foreach ($recent as $r): ?>
                         <tr>
-                            <td><span class="badge" style="background:<?= e(unit_by_code($r['code'])['color'] ?? '#6B7280') ?>"><?= e(explode(' ', $r['unit'])[0]) ?></span></td>
+                            <td><span class="badge text-white" style="background:var(--brand-teal)"><?= e(explode(' ', $r['unit'])[0]) ?></span></td>
                             <td class="small"><?= e($r['no']) ?></td>
                             <td class="small"><?= tgl($r['waktu'], true) ?></td>
                             <td class="small"><?= e($r['nama']) ?></td>

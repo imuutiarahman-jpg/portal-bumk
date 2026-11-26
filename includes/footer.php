@@ -17,7 +17,7 @@ $user = current_user();
     </div>
 </footer>
 
-<script src="<?= base_url('/assets/js/charts.js') ?>?v=2"></script>
+<script src="<?= base_url('/assets/js/charts.js') ?>?v=3"></script>
 <script src="<?= base_url('/assets/js/main.js') ?>?v=5"></script>
 </body>
 </html>

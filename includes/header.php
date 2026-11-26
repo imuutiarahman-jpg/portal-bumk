@@ -58,7 +58,7 @@ $unitMenus = [
     </script>
     <link href="<?= base_url('/assets/vendor/bootstrap/bootstrap.min.css') ?>?v=1" rel="stylesheet" onerror="this.href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css'">
     <link href="<?= base_url('/assets/vendor/bootstrap-icons/bootstrap-icons.min.css') ?>?v=1" rel="stylesheet">
-    <link href="<?= base_url('/assets/css/style.css') ?>?v=12" rel="stylesheet">
+    <link href="<?= base_url('/assets/css/style.css') ?>?v=13" rel="stylesheet">
     <script src="<?= base_url('/assets/vendor/bootstrap/bootstrap.bundle.min.js') ?>?v=2"></script>
     <script>window.bootstrap || document.write('<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"><\/script>');</script>
     <script src="<?= base_url('/assets/vendor/chartjs/chart.umd.min.js') ?>?v=1"></script>
@@ -66,7 +66,7 @@ $unitMenus = [
 <body class="<?= $isPublic ? 'public-page' : 'app-page' ?>" data-unit="<?= e($pageUnit) ?>">
 <a class="skip-link" href="#mainContent">Lewati ke konten utama</a>
 
-<header class="portal-header">
+<header class="portal-header<?= $isPublic ? ' public-header' : '' ?>">
     <div class="container-fluid px-4 h-100 d-flex align-items-center justify-content-between">
         <?php if (!$isPublic && $user): ?>
             <button class="btn mobile-menu-btn" type="button" id="menuToggle" aria-label="Buka menu navigasi" aria-expanded="false" aria-controls="appSidebar"><i class="bi bi-list"></i></button>
@@ -76,10 +76,20 @@ $unitMenus = [
             <span class="logo-crop"><img src="<?= base_url('/logo/logobumk.jpeg') ?>" alt="Logo BUMK UMGO" class="header-logo bumk"></span>
             <span class="portal-title ms-1 d-none d-lg-block">Portal Sistem Informasi Unit Usaha BUMK UMGO<small>Terintegrasi · Qmas · SM Corner · Daqam</small></span>
         </a>
-        <nav class="header-nav d-flex align-items-center" aria-label="Navigasi utama">
+        <nav class="header-nav d-flex align-items-center gap-2" aria-label="Navigasi utama">
             <button type="button" class="btn btn-sm btn-outline-secondary theme-toggle" id="themeToggle" aria-label="Ganti mode tampilan" title="Ganti mode gelap/terang"><i class="bi bi-moon-stars"></i></button>
-            <a class="btn btn-sm btn-outline-secondary" href="<?= base_url('/modules/portal/index.php') ?>" <?= str_contains($_SERVER['PHP_SELF'], '/portal/') ? 'aria-current="page"' : '' ?>><i class="bi bi-house-door"></i> <span class="d-none d-sm-inline">Beranda</span></a>
-            <?php if ($user): ?>
+            <?php if ($isPublic): ?>
+                <a class="public-nav-link" href="<?= base_url('/modules/portal/index.php') ?>">Beranda</a>
+                <a class="public-nav-link" href="<?= base_url('/modules/portal/index.php#unit-usaha') ?>">Unit Usaha</a>
+                <a class="public-nav-link" href="<?= base_url('/modules/portal/index.php#panduan') ?>">Panduan</a>
+                <?php if ($user): ?>
+                    <a class="btn btn-sm btn-brand" href="<?= base_url(dashboard_path()) ?>"><i class="bi bi-speedometer2"></i> Dashboard Saya</a>
+                <?php else: ?>
+                    <a class="btn btn-sm btn-brand" href="<?= base_url('/modules/auth/login.php') ?>"><i class="bi bi-shield-lock"></i> Masuk</a>
+                <?php endif; ?>
+            <?php else: ?>
+                <a class="btn btn-sm btn-outline-secondary" href="<?= base_url('/modules/portal/index.php') ?>" <?= str_contains($_SERVER['PHP_SELF'], '/portal/') ? 'aria-current="page"' : '' ?>><i class="bi bi-house-door"></i> <span class="d-none d-sm-inline">Beranda</span></a>
+                <?php if ($user): ?>
                 <?php if ($user['role'] === 'super_admin'): ?>
                     <a class="btn btn-sm btn-outline-secondary d-none d-md-inline-block" href="<?= base_url('/modules/superadmin/dashboard.php') ?>" <?= str_contains($_SERVER['PHP_SELF'], 'superadmin/dashboard') ? 'aria-current="page"' : '' ?>><i class="bi bi-bar-chart-line"></i> Omzet Gabungan</a>
                 <?php else: ?>
@@ -87,8 +97,9 @@ $unitMenus = [
                 <?php endif; ?>
                 <span class="badge bg-light text-dark border d-none d-md-inline-block"><?= e(role_label($user['role'])) ?></span>
                 <span class="user-pill d-none d-lg-inline-flex" title="<?= e($user['full_name']) ?>"><span class="user-avatar"><?= e($initials) ?></span><span class="text-truncate" style="max-width:130px"><?= e($user['full_name']) ?></span></span>
-            <?php else: ?>
-                <a class="btn btn-sm btn-success" href="<?= base_url('/modules/auth/login.php') ?>"><i class="bi bi-shield-lock"></i> Login</a>
+                <?php else: ?>
+                    <a class="btn btn-sm btn-brand" href="<?= base_url('/modules/auth/login.php') ?>"><i class="bi bi-shield-lock"></i> Masuk</a>
+                <?php endif; ?>
             <?php endif; ?>
         </nav>
     </div>

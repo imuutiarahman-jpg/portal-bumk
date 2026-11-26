@@ -139,7 +139,7 @@ portal-bumk/
 
 Implementasi mengikuti dokumen `PSD_Perancangan_Portal_BUMK_UMGO.docx` dengan penyempurnaan palet (UI v3):
 - Warna identitas UMGO: hijau tua `#0B4F3E` → hijau terang `#10B981`, dengan turunan shade untuk aksen/soft background
-- Warna unit: Qmas `#0284C7`, SM Corner `#059669`, Daqam `#92400E` (dipakai lewat atribut `data-unit` pada `<body>`)
+- Warna identitas visual: teal `#0E9F90` dipakai seragam di header, sidebar, kartu, tombol, grafik, dan hero. Atribut `data-unit` pada `<body>` tetap ada, tetapi variabel warna unit (`--qmas`, `--smcorner`, `--daqam`) kini mengacu ke teal yang sama.
 - Header 76px, hero ±296px, footer 68px; kartu KPI/unit_radius 16px
 - Struktur layer PSD diterjemahkan ke section CSS: `01_HEADER_NAV`, `02_HERO_BANNER`, `03_MENU_UNIT_USAHA`, `04_FOOTER_INFO`
 - Bootstrap, Bootstrap Icons, dan Chart.js disimpan lokal di `assets/vendor/` (tetap berfungsi tanpa internet)

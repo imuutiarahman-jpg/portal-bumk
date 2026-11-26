@@ -37,9 +37,20 @@ $linkFor = function (string $code) use ($user): string {
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
-<section class="hero-banner" id="hero" aria-labelledby="heroTitle">
-    <div class="hero-ornament" aria-hidden="true"><i class="bi bi-diagram-3"></i></div>
-    <div class="container-fluid px-4 hero-inner">
+<section class="hero-split" id="hero" aria-labelledby="heroTitle">
+    <div class="hero-visual">
+        <div class="visual-glow" aria-hidden="true"></div>
+        <div class="visual-orbit" aria-hidden="true"><i class="bi bi-diagram-3"></i></div>
+        <div class="visual-logos">
+            <img src="<?= base_url('/logo/images.png') ?>" alt="Lambang UMGO" class="visual-logo umgo">
+            <span class="visual-logo-wrap"><img src="<?= base_url('/logo/logobumk.jpeg') ?>" alt="Logo BUMK UMGO" class="visual-logo bumk"></span>
+        </div>
+        <?php foreach ($units as $u):
+            $unit = unit_by_code($u['code']); ?>
+            <span class="hero-badge b<?= $u['code'] === 'qmas' ? '1' : ($u['code'] === 'smcorner' ? '2' : '3') ?>"><i class="bi <?= e($u['icon']) ?>"></i> <?= e($unit['name'] ?? $u['code']) ?></span>
+        <?php endforeach; ?>
+    </div>
+    <div class="hero-panel">
         <div class="hero-kicker"><i class="bi bi-mortarboard-fill"></i> Badan Usaha Milik Kampus · UMGO</div>
         <h1 id="heroTitle">"Sinergi Kemandirian Ekonomi Kampus Universitas Muhammadiyah Gorontalo"</h1>
         <p>Pilih unit usaha di bawah ini untuk masuk ke dashboard operasional. Satu pintu masuk untuk seluruh lini bisnis BUMK UMGO.</p>
@@ -69,20 +80,19 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="unit-grid">
         <?php foreach ($units as $u):
             $unit = unit_by_code($u['code']);
-            $color = $unit['color'] ?? '#0B4F3E';
         ?>
         <article class="unit-card" aria-labelledby="card-<?= e($u['code']) ?>">
-            <div class="card-accent" style="background:<?= e($color) ?>"></div>
+            <div class="card-accent"></div>
             <div class="card-body">
-                <div class="card-icon mx-auto" style="background:<?= e($color) ?>"><i class="bi <?= e($u['icon']) ?>" aria-hidden="true"></i></div>
+                <div class="card-icon mx-auto"><i class="bi <?= e($u['icon']) ?>" aria-hidden="true"></i></div>
                 <h3 class="card-title text-center" id="card-<?= e($u['code']) ?>"><?= e(strtoupper($unit['name'] ?? $u['code'])) ?></h3>
                 <p class="card-text text-center"><?= e($unit['description'] ?? '') ?></p>
                 <ul>
                     <?php foreach ($u['items'] as $item): ?>
-                        <li><i class="bi bi-check-circle-fill" style="color:<?= e($color) ?>" aria-hidden="true"></i><?= e($item) ?></li>
+                        <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><?= e($item) ?></li>
                     <?php endforeach; ?>
                 </ul>
-                <a href="<?= e($linkFor($u['code'])) ?>" class="btn btn-unit text-white" style="background:<?= e($color) ?>">
+                <a href="<?= e($linkFor($u['code'])) ?>" class="btn btn-unit btn-brand text-white">
                     <?= e($u['cta']) ?> <i class="bi bi-arrow-right" aria-hidden="true"></i>
                 </a>
             </div>

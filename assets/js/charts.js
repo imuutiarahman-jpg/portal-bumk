@@ -1,10 +1,12 @@
 /* Portal BUMK UMGO – chart helper (Chart.js lokal) */
 (function () {
+    var PALETTE = ['#0E9F90', '#5BC8B6', '#0A8276', '#7FD8C8', '#128C7E', '#A7E8DC'];
+    function colorAt(i) { return PALETTE[i % PALETTE.length]; }
     function parse(el, key, fallback) {
         try { return JSON.parse(el.dataset[key]); } catch (e) { return fallback; }
     }
     function hexToRgba(hex, alpha) {
-        var h = (hex || '#0B4F3E').replace('#', '');
+        var h = (hex || PALETTE[0]).replace('#', '');
         if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
         var n = parseInt(h, 16);
         return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
@@ -14,8 +16,8 @@
         var type = el.dataset.chart || 'bar';
         var labels = parse(el, 'labels', []);
         var raw = parse(el, 'datasets', []);
-        var datasets = raw.map(function (d) {
-            var color = d.color || '#0B4F3E';
+        var datasets = raw.map(function (d, index) {
+            var color = colorAt(index);
             if (type === 'line') {
                 return {
                     label: d.label || 'Data', data: d.data || [],
@@ -28,20 +30,20 @@
                 return {
                     label: d.label || 'Data', data: d.data || [],
                     backgroundColor: d.data && d.data.map ? d.data.map(function (_, i) {
-                        return (raw[i] && raw[i].color) || ['#0B4F3E', '#10B981', '#0284C7', '#0E7C5A', '#92400E', '#94A3B8'][i % 6];
+                        return colorAt(i);
                     }) : [],
                     borderColor: '#fff', borderWidth: 2, hoverOffset: 6
                 };
             }
             return {
                 label: d.label || 'Data', data: d.data || [],
-                backgroundColor: (d.colors && d.colors.length) ? d.colors : color,
+                backgroundColor: d.data && d.data.map ? d.data.map(function (_, i) { return colorAt(i); }) : color,
                 borderRadius: 6, borderSkipped: false, maxBarThickness: 26
             };
         });
         if (!datasets.length) datasets = [{
             label: 'Data', data: parse(el, 'values', []),
-            backgroundColor: el.dataset.color || '#0B4F3E', borderRadius: 6, maxBarThickness: 26
+            backgroundColor: PALETTE[0], borderRadius: 6, maxBarThickness: 26
         }];
         var isDonut = type === 'doughnut' || type === 'pie';
         new Chart(el.getContext('2d'), {
