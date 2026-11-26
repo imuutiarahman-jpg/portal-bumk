@@ -8,7 +8,9 @@ $activeUnit = 'qmas';
 
 $omzetToday = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE DATE(transaction_date)=CURDATE()');
 $galonToday = val('SELECT COALESCE(SUM(i.quantity),0) FROM qmas_transaction_items i JOIN qmas_products p ON p.id=i.product_id JOIN qmas_transactions t ON t.id=i.transaction_id WHERE p.kind="galon" AND DATE(t.transaction_date)=CURDATE()');
-$dusToday   = val('SELECT COALESCE(SUM(i.quantity),0) FROM qmas_transaction_items i JOIN qmas_products p ON p.id=i.product_id JOIN qmas_transactions t ON t.id=i.transaction_id WHERE p.kind="dus" AND DATE(t.transaction_date)=CURDATE()');
+// Semua produk Qmas dijual dalam bentuk dus, jadi KPI dus menghitung
+// seluruh item yang terjual hari ini (tanpa filter kind produk).
+$dusToday   = val('SELECT COALESCE(SUM(i.quantity),0) FROM qmas_transaction_items i JOIN qmas_transactions t ON t.id=i.transaction_id WHERE DATE(t.transaction_date)=CURDATE()');
 $stokTotal  = val('SELECT COALESCE(SUM(stock),0) FROM qmas_products WHERE is_active=1');
 $piutang    = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE payment_status="piutang"');
 $piutangLunas = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE payment_status="piutang" AND lunas_date IS NOT NULL');
