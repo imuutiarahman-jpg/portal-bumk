@@ -16,12 +16,13 @@ $sumTotal = 0; $sumLunas = 0; $sumPiutang = 0; $sumTunai = 0; $sumTransfer = 0;
 $perBank = ['BSI' => 0, 'MUAMALAT' => 0];
 foreach ($rows as $r) {
     $amount = (float) $r['total_amount'];
+    $status = qmas_laporan_status($r['payment_status'], $r['transaction_date']);
     $sumTotal += $amount;
-    if ($r['payment_status'] === 'piutang') {
+    if ($status === 'piutang') {
         $sumPiutang += $amount;
     } else {
         $sumLunas += $amount;
-        if ($r['payment_status'] === 'transfer') {
+        if ($status === 'transfer') {
             $sumTransfer += $amount;
             if (isset($perBank[$r['bank']])) $perBank[$r['bank']] += $amount;
         } else {
@@ -55,7 +56,7 @@ if (($_GET['export'] ?? '') === 'csv') {
         $hpp = $costMap[$r['id']] ?? 0;
         fputcsv($out, [
             $r['transaction_no'], tgl($r['transaction_date'], true), $r['customer_name'], $r['customer_type'],
-            payment_label($r['payment_status'], $r['bank']),
+            payment_label(qmas_laporan_status($r['payment_status'], $r['transaction_date']), $r['bank']),
             $r['lunas_date'] ? tgl($r['lunas_date']) : '', $r['setor_date'] ? tgl($r['setor_date']) : '',
             $r['total_amount'], $hpp, (float)$r['total_amount'] - $hpp,
         ]);
@@ -92,12 +93,13 @@ document.getElementById('btnFilter').addEventListener('click', function () {
 });
 </script>
 
-<div class="row g-3 mb-3">
-    <div class="col-md-3"><div class="card kpi-card p-3"><span class="kpi-label">TOTAL OMZET</span><div class="kpi-value text-primary"><?= rupiah($sumTotal) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><span class="kpi-label">JUMLAH TRANSAKSI</span><div class="kpi-value"><?= angka(count($rows)) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><span class="kpi-label">LUNAS (TUNAI + TRANSFER)</span><div class="kpi-value text-success"><?= rupiah($sumLunas) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><span class="kpi-label">PIUTANG</span><div class="kpi-value text-warning"><?= rupiah($sumPiutang) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><span class="kpi-label">LABA (OMZET − HPP)</span><div class="kpi-value text-success"><?= rupiah($costs['laba']) ?></div></div></div>
+<div class="row g-3 mb-3 row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-6">
+    <div class="col"><div class="card kpi-card p-3"><span class="kpi-label">TOTAL OMZET</span><div class="kpi-value text-primary"><?= rupiah($sumTotal) ?></div></div></div>
+    <div class="col"><div class="card kpi-card p-3"><span class="kpi-label">JUMLAH TRANSAKSI</span><div class="kpi-value"><?= angka(count($rows)) ?></div></div></div>
+    <div class="col"><div class="card kpi-card p-3"><span class="kpi-label">TUNAI</span><div class="kpi-value text-success"><?= rupiah($sumTunai) ?></div><div class="kpi-foot">Mulai <?= date('d M Y', strtotime(LAPORAN_TUNAI_SEJAK)) ?></div></div></div>
+    <div class="col"><div class="card kpi-card p-3"><span class="kpi-label">TRANSFER</span><div class="kpi-value text-primary"><?= rupiah($sumTransfer) ?></div><div class="kpi-foot">Termasuk tunai sebelum <?= date('d M Y', strtotime(LAPORAN_TUNAI_SEJAK)) ?></div></div></div>
+    <div class="col"><div class="card kpi-card p-3"><span class="kpi-label">PIUTANG</span><div class="kpi-value text-warning"><?= rupiah($sumPiutang) ?></div></div></div>
+    <div class="col"><div class="card kpi-card p-3"><span class="kpi-label">LABA (OMZET − HPP)</span><div class="kpi-value text-success"><?= rupiah($costs['laba']) ?></div></div></div>
 </div>
 
 <div class="card content-card mb-3"><div class="card-body">
@@ -127,10 +129,10 @@ document.getElementById('btnFilter').addEventListener('click', function () {
     <div class="table-responsive"><table class="table table-sm table-hover mb-0">
         <thead class="table-light"><tr><th>No. Transaksi</th><th>Tanggal</th><th>Pelanggan</th><th>Jenis</th><th>Status</th><th>Tgl Lunas</th><th>Tgl Setor</th><th class="text-end">Total</th><th class="text-end">HPP</th><th class="text-end">Laba</th></tr></thead>
         <tbody><?php if (!$rows): ?><tr><td colspan="10" class="empty-state">Tidak ada transaksi.</td></tr><?php endif; ?>
-        <?php foreach ($rows as $r): $hpp = $costMap[$r['id']] ?? 0; ?><tr>
+        <?php foreach ($rows as $r): $hpp = $costMap[$r['id']] ?? 0; $st = qmas_laporan_status($r['payment_status'], $r['transaction_date']); ?><tr>
             <td class="small"><?= e($r['transaction_no']) ?></td><td class="small"><?= tgl($r['transaction_date'], true) ?></td>
             <td class="small"><?= e($r['customer_name']) ?></td><td class="small"><?= e(ucfirst($r['customer_type'])) ?></td>
-            <td><span class="badge bg-<?= payment_badge($r['payment_status']) ?>"><?= e(payment_label($r['payment_status'], $r['bank'])) ?></span></td>
+            <td><span class="badge bg-<?= payment_badge($st) ?>"><?= e(payment_label($st, $r['bank'])) ?></span></td>
             <td class="small"><?= $r['lunas_date'] ? tgl($r['lunas_date']) : '-' ?></td>
             <td class="small"><?= $r['setor_date'] ? tgl($r['setor_date']) : '-' ?></td>
             <td class="text-end fw-semibold"><?= rupiah($r['total_amount']) ?></td>

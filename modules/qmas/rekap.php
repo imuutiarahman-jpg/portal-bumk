@@ -14,8 +14,8 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) $to = date('Y-m-d');
 $rows = all("SELECT DATE_FORMAT(transaction_date,'%Y-%m') AS periode,
                     COUNT(*) AS trx,
                     COALESCE(SUM(total_amount),0) AS omzet,
-                    COALESCE(SUM(CASE WHEN payment_status='tunai' THEN total_amount ELSE 0 END),0) AS tunai,
-                    COALESCE(SUM(CASE WHEN payment_status='transfer' THEN total_amount ELSE 0 END),0) AS transfer,
+                    COALESCE(SUM(CASE WHEN payment_status='tunai' AND DATE(transaction_date)>='".LAPORAN_TUNAI_SEJAK."' THEN total_amount ELSE 0 END),0) AS tunai,
+                    COALESCE(SUM(CASE WHEN payment_status='transfer' OR (payment_status='tunai' AND DATE(transaction_date)<'".LAPORAN_TUNAI_SEJAK."') THEN total_amount ELSE 0 END),0) AS transfer,
                     COALESCE(SUM(CASE WHEN bank='BSI' THEN total_amount ELSE 0 END),0) AS bsi,
                     COALESCE(SUM(CASE WHEN bank='MUAMALAT' THEN total_amount ELSE 0 END),0) AS muamalat,
                     COALESCE(SUM(CASE WHEN payment_status='piutang' THEN total_amount ELSE 0 END),0) AS piutang

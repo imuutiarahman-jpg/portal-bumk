@@ -28,7 +28,7 @@ $trend = all("SELECT DATE_FORMAT(transaction_date,'%Y-%m') periode, SUM(total_am
 $trendLabels = []; $trendData = [];
 foreach ($trend as $t) { $trendLabels[] = date('M Y', strtotime($t['periode'].'-01')); $trendData[] = (float) $t['omzet']; }
 
-$comp = all('SELECT payment_status status, bank, SUM(total_amount) total FROM qmas_transactions GROUP BY payment_status, bank ORDER BY total DESC');
+$comp = all("SELECT ".qmas_laporan_status_sql()." AS status, bank, SUM(total_amount) total FROM qmas_transactions GROUP BY status, bank ORDER BY total DESC");
 $compLabels = []; $compData = [];
 foreach ($comp as $c) { $compLabels[] = payment_label($c['status'], $c['bank']); $compData[] = (float) $c['total']; }
 

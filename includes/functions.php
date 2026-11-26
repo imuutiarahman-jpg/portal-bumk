@@ -222,6 +222,30 @@ function payment_bank(string $status, $postedBank = null): ?string
     return in_array($bank, ['BSI', 'MUAMALAT'], true) ? $bank : null;
 }
 
+/* ---------- Klasifikasi pembayaran Qmas untuk laporan ---------- */
+
+/**
+ * Tanggal mulai transaksi Tunai dihitung sebagai Tunai di laporan.
+ * Transaksi berstatus Tunai sebelum tanggal ini diklasifikasikan sebagai Transfer.
+ */
+define('LAPORAN_TUNAI_SEJAK', '2026-11-24');
+
+function qmas_laporan_status(string $status, $date = null): string
+{
+    if ($status === 'tunai' && $date !== null
+        && substr((string) $date, 0, 10) < LAPORAN_TUNAI_SEJAK) {
+        return 'transfer';
+    }
+    return $status;
+}
+
+/** Ekspresi SQL yang setara dengan qmas_laporan_status(), untuk query GROUP BY. */
+function qmas_laporan_status_sql(string $statusCol = 'payment_status', string $dateCol = 'transaction_date'): string
+{
+    return "CASE WHEN $statusCol='tunai' AND DATE($dateCol) < '" . LAPORAN_TUNAI_SEJAK
+        . "' THEN 'transfer' ELSE $statusCol END";
+}
+
 /* ---------- Kebijakan password ---------- */
 
 function password_issue(string $password, string $username = ''): ?string

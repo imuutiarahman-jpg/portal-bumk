@@ -29,7 +29,7 @@ $avgTrx = $grandTrx > 0 ? $grandTotal / $grandTrx : 0;
 
 $recent = all("SELECT * FROM (
     SELECT 'Qmas Air Mineral' AS unit, transaction_no AS no, transaction_date AS waktu, customer_name AS nama, total_amount AS total,
-           CASE WHEN payment_status = 'transfer' THEN CONCAT('Transfer (', IFNULL(bank,'-'), ')') ELSE payment_status END AS keterangan,
+           CASE WHEN payment_status = 'transfer' OR (payment_status='tunai' AND DATE(transaction_date)<'".LAPORAN_TUNAI_SEJAK."') THEN CONCAT('Transfer (', IFNULL(bank,'-'), ')') ELSE payment_status END AS keterangan,
            'qmas' AS code FROM qmas_transactions
     UNION ALL
     SELECT 'SM Corner', transaction_no, transaction_date, customer_name, total_amount, payment_method, 'smcorner' FROM sm_transactions
@@ -47,7 +47,7 @@ $trend = all("SELECT DATE_FORMAT(waktu,'%Y-%m') periode, SUM(total) omzet FROM (
 $trendLabels = []; $trendData = [];
 foreach ($trend as $t) { $trendLabels[] = date('M Y', strtotime($t['periode'].'-01')); $trendData[] = (float) $t['omzet']; }
 
-$comp = all('SELECT payment_status status, bank, SUM(total_amount) total FROM qmas_transactions GROUP BY payment_status, bank ORDER BY total DESC');
+$comp = all("SELECT ".qmas_laporan_status_sql()." AS status, bank, SUM(total_amount) total FROM qmas_transactions GROUP BY status, bank ORDER BY total DESC");
 $compLabels = []; $compData = [];
 foreach ($comp as $c) { $compLabels[] = payment_label($c['status'], $c['bank']); $compData[] = (float) $c['total']; }
 

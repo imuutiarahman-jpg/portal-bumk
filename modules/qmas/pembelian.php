@@ -124,7 +124,22 @@ if (!empty($_GET['detail'])) {
     }
 }
 
-$list = all('SELECT * FROM qmas_purchases ORDER BY purchase_date DESC LIMIT 30');
+$dari   = $_GET['dari'] ?? '';
+$sampai = $_GET['sampai'] ?? '';
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dari))   $dari = '';
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $sampai)) $sampai = '';
+$conditions = [];
+$params = [];
+if ($dari !== '' && $sampai !== '') {
+    $conditions[] = 'DATE(purchase_date) BETWEEN ? AND ?';
+    $params[] = $dari; $params[] = $sampai;
+} elseif ($dari !== '') {
+    $conditions[] = 'DATE(purchase_date) >= ?'; $params[] = $dari;
+} elseif ($sampai !== '') {
+    $conditions[] = 'DATE(purchase_date) <= ?'; $params[] = $sampai;
+}
+$where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
+$list = all('SELECT * FROM qmas_purchases ' . $where . ' ORDER BY purchase_date DESC LIMIT 30', $params);
 $products = all('SELECT * FROM qmas_products WHERE is_active=1 ORDER BY name');
 $today = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_purchases WHERE DATE(purchase_date)=CURDATE()');
 $month = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_purchases WHERE DATE_FORMAT(purchase_date,"%Y-%m")=DATE_FORMAT(CURDATE(),"%Y-%m")');
@@ -197,7 +212,35 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
     <div class="col-lg-7">
         <div class="card content-card">
-            <div class="card-header">Riwayat Pembelian</div>
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span>Riwayat Pembelian</span>
+                <div class="btn-group btn-group-sm">
+                    <a href="<?= base_url('/modules/qmas/pembelian.php?dari=' . date('Y-m-d') . '&sampai=' . date('Y-m-d')) ?>" class="btn btn-outline-secondary">Hari Ini</a>
+                    <a href="<?= base_url('/modules/qmas/pembelian.php?dari=' . date('Y-m-d', strtotime('-6 days')) . '&sampai=' . date('Y-m-d')) ?>" class="btn btn-outline-secondary">7 Hari</a>
+                    <a href="<?= base_url('/modules/qmas/pembelian.php?dari=' . date('Y-m-01') . '&sampai=' . date('Y-m-t')) ?>" class="btn btn-outline-secondary">Bulan Ini</a>
+                </div>
+            </div>
+            <div class="card-body py-2 border-bottom">
+                <form method="get" class="row g-2 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label small fw-semibold mb-1">Dari Tanggal</label>
+                        <input type="date" name="dari" class="form-control form-control-sm" value="<?= e($dari) ?>">
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label small fw-semibold mb-1">Sampai Tanggal</label>
+                        <input type="date" name="sampai" class="form-control form-control-sm" value="<?= e($sampai) ?>">
+                    </div>
+                    <div class="col-auto d-flex gap-1">
+                        <button class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Tampilkan</button>
+                        <?php if ($dari !== '' || $sampai !== ''): ?>
+                            <a href="<?= base_url('/modules/qmas/pembelian.php') ?>" class="btn btn-sm btn-outline-secondary">Reset</a>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($dari !== '' || $sampai !== ''): ?>
+                        <div class="col-12 small text-muted">Menampilkan <?= count($list) ?> nota · <?= e($dari ?: '...') ?> s/d <?= e($sampai ?: '...') ?></div>
+                    <?php endif; ?>
+                </form>
+            </div>
             <div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle">
                 <thead class="table-light"><tr><th>No. Nota</th><th>Tanggal</th><th>Supplier</th><th class="text-end">Total</th><th>Status</th><th></th></tr></thead>
                 <tbody>
