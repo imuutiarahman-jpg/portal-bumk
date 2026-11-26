@@ -29,6 +29,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'setor') {
+        $id = (int) ($_POST['id'] ?? 0);
+        $bank = payment_bank('transfer', $_POST['bank'] ?? null);
+        $tanggal = trim((string) ($_POST['tanggal_setor'] ?? ''));
+        if ($bank === null) $errors[] = 'Bank tujuan wajib dipilih (BSI / Muamalat).';
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) $errors[] = 'Tanggal setor tidak valid.';
+        $t = $id > 0 ? row('SELECT * FROM qmas_transactions WHERE id=? AND payment_status="tunai"', [$id]) : null;
+        if (!$t) $errors[] = 'Transaksi tunai tidak ditemukan atau sudah disetor.';
+        if (!$errors) {
+            run('UPDATE qmas_transactions SET payment_status="transfer", bank=?, setor_date=? WHERE id=?',
+                [$bank, $tanggal . ' ' . date('H:i:s'), $id]);
+            activity('qmas', 'Setor tunai ke bank ' . $t['transaction_no'] . ' → ' . $bank . ' (' . $tanggal . ')');
+            flash_set('success', 'Transaksi ' . $t['transaction_no'] . ' berhasil disetorkan ke ' . $bank . '.');
+            $back = '/modules/qmas/transaksi.php';
+            $qs = [];
+            $backQ = clean($_POST['back_q'] ?? '');
+            $backStatus = $_POST['back_status'] ?? '';
+            if ($backQ !== '') $qs['q'] = $backQ;
+            if (in_array($backStatus, ['tunai', 'transfer', 'piutang'], true)) $qs['status'] = $backStatus;
+            if ($qs) $back .= '?' . http_build_query($qs);
+            redirect($back);
+        }
+    }
+
     if ($action === 'hapus') {
         $id = (int) ($_POST['id'] ?? 0);
         $typed = strtoupper(clean($_POST['confirm_no'] ?? ''));
@@ -256,6 +280,11 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <a href="<?= base_url('/modules/qmas/transaksi.php?detail='.$t['id']) ?>" class="btn btn-sm btn-outline-primary py-0">Detail</a>
                                 <?php if ($t['payment_status'] === 'piutang'): ?>
                                 <button type="button" class="btn btn-sm btn-outline-success py-0 btn-lunas" data-id="<?= $t['id'] ?>" data-no="<?= e($t['transaction_no']) ?>">Lunas</button>
+                                <?php elseif ($t['payment_status'] === 'tunai' && empty($t['setor_date'])): ?>
+                                <button type="button" class="btn btn-sm btn-outline-info py-0 btn-setor"
+                                    data-id="<?= $t['id'] ?>"
+                                    data-no="<?= e($t['transaction_no']) ?>"
+                                    data-total="<?= e(rupiah($t['total_amount'])) ?>">Setor</button>
                                 <?php endif; ?>
                                 <button type="button" class="btn btn-sm btn-outline-danger py-0 btn-hapus"
                                     data-id="<?= $t['id'] ?>"
@@ -313,6 +342,43 @@ require_once __DIR__ . '/../../includes/header.php';
             </form>
         </div>
     </div>
+</div>
+
+<!-- Modal setor tunai ke bank -->
+<div class="modal fade" id="setorModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="post">
+            <?php csrf_field(); ?>
+            <input type="hidden" name="action" value="setor">
+            <input type="hidden" name="id" id="setorId">
+            <input type="hidden" name="back_q" value="<?= e($q) ?>">
+            <input type="hidden" name="back_status" value="<?= e($filterStatus) ?>">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-bank"></i> Setor Tunai ke Bank</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-light py-2 small mb-3">Transaksi: <b id="setorNo"></b><br>Total tunai: <b id="setorTotal"></b></div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Bank Tujuan</label>
+                    <select name="bank" id="setorBank" class="form-select" required>
+                        <option value="">-- Pilih Bank --</option>
+                        <option value="BSI">BSI (Bank Syariah Indonesia)</option>
+                        <option value="MUAMALAT">Muamalat</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Tanggal Setor</label>
+                    <input type="date" name="tanggal_setor" id="setorTanggal" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                </div>
+                <div class="form-text small">Setelah disetor, status transaksi berubah menjadi <b>Transfer</b> dan tanggal setor tampil di laporan.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-sm text-white fw-bold" style="background:var(--qmas)"><i class="bi bi-check2-circle"></i> Simpan Penyetoran</button>
+            </div>
+        </form>
+    </div></div>
 </div>
 
 <!-- Modal hapus transaksi -->
@@ -400,6 +466,20 @@ function toggleLunasBank() {
     lunasBank.required = isTransfer;
 }
 lunasMethod.addEventListener('change', toggleLunasBank);
+
+// Modal setor tunai ke bank
+if (typeof bootstrap !== 'undefined') {
+    var setorModal = new bootstrap.Modal(document.getElementById('setorModal'));
+    document.querySelectorAll('.btn-setor').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.getElementById('setorId').value = btn.dataset.id;
+            document.getElementById('setorNo').textContent = btn.dataset.no;
+            document.getElementById('setorTotal').textContent = btn.dataset.total;
+            document.getElementById('setorBank').value = '';
+            setorModal.show();
+        });
+    });
+}
 
 // Modal hapus transaksi: konfirmasi dengan mengetik nomor transaksi
 if (typeof bootstrap !== 'undefined') {

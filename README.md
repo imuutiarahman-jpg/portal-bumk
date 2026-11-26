@@ -70,7 +70,7 @@ Portal Utama (landing: header 80px, hero 280px, 3 kartu unit, footer 70px)
 
 ### Qmas Air Mineral
 - KPI: omzet hari ini, galon terjual, dus terjual, sisa stok gudang
-- Transaksi & distribusi: input penjualan multi-item, jenis pelanggan (fakultas/mahasiswa/umum), serta **Hapus transaksi** yang salah input (konfirmasi dengan mengetik nomor transaksi; stok otomatis dihitung ulang)
+- Transaksi & distribusi: input penjualan multi-item, jenis pelanggan (fakultas/mahasiswa/umum), serta **Hapus transaksi** yang salah input (konfirmasi dengan mengetik nomor transaksi; stok otomatis dihitung ulang). Transaksi Tunai yang akan disetor ke bank bisa diklik **Setor** (pilih bank BSI/Muamalat + tanggal setor); status otomatis jadi **Transfer** dan `Tgl Setor` tampil di laporan. Pencarian nama pelanggan tersedia di header riwayat transaksi.
 - **Stok dihitung menurut tanggal**: `stok = opening_stock + pembelian/penjualan dengan tanggal > opening_stock_date (s.d. hari ini)`; transaksi hasil import **juga** mengurangi stok. Data sebelum tanggal stok awal tidak dikurangi dua kali. Pembelian backdated hanya memengaruhi transaksi setelah tanggalnya. Tombol **Hitung Ulang Stok** di **Stok & Galon** dipakai untuk sinkronisasi.
 - **Import Stok Masuk** (`Import Stok Masuk`): tarik kolom **TANGGAL + Stok Masuk** dari tab *Kartu Kontrol Stok* Qmas (link/paste/CSV) menjadi nota pembelian bertanggal. Mode timpa batch `KARTU-STOK-2026` mencegah dobel. Harga nota memakai HPP produk yang berlaku agar laporan laba tidak berubah. Untuk data 2026, `opening_stock` dipakai sebagai angka penyeimbang selisih antara orderan yang diinput di aplikasi dengan kolom `Stok Keluar` kartu; lihat `sql/update_qmas_opening_stock_date.sql`.
 - **Hapus Data per Bulan**: pilih periode `YYYY-MM`, konfirmasi dengan mengetik periode tersebut; menghapus seluruh transaksi & pembelian bulan itu dan menyetel stok semua produk Qmas menjadi 0 (cocok untuk mengosongkan data Qmas)
@@ -130,6 +130,7 @@ portal-bumk/
     ├── update_qmas_pembelian.sql    # tabel pembelian / stok masuk (Qmas)
     ├── update_qmas_opening_stock_date.sql  # tanggal stok awal + angka penyeimbang
     ├── update_qmas_pembelian_lunas.sql     # kolom lunas_date nota pembelian
+    ├── update_qmas_setor_tunai_lama.sql     # opsional: tunai lama → transfer
     └── update_smcorner_lengkap.sql  # HPP + pembelian SM Corner
 ```
 
