@@ -29,23 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if ($action === 'setor_semua') {
-        $bank = payment_bank('transfer', $_POST['bank'] ?? null);
-        $tanggal = trim((string) ($_POST['tanggal_setor'] ?? ''));
-        if ($bank === null) $errors[] = 'Bank tujuan wajib dipilih (BSI / Muamalat).';
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) $errors[] = 'Tanggal setor tidak valid.';
-        $jumlah = (int) val('SELECT COUNT(*) FROM qmas_transactions WHERE payment_status="tunai"');
-        $totalDana = (float) val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE payment_status="tunai"');
-        if ($jumlah < 1) $errors[] = 'Tidak ada transaksi tunai yang perlu disetor.';
-        if (!$errors) {
-            run('UPDATE qmas_transactions SET payment_status="transfer", bank=?, setor_date=? WHERE payment_status="tunai"',
-                [$bank, $tanggal . ' ' . date('H:i:s')]);
-            activity('qmas', 'Setor tunai massal: ' . $jumlah . ' transaksi (' . rupiah($totalDana) . ') ke ' . $bank . ' tanggal ' . $tanggal);
-            flash_set('success', $jumlah . ' transaksi tunai (' . rupiah($totalDana) . ') berhasil disetor ke ' . $bank . ' tanggal ' . $tanggal . '.');
-            redirect('/modules/qmas/transaksi.php');
-        }
-    }
-
     if ($action === 'hapus') {
         $id = (int) ($_POST['id'] ?? 0);
         $typed = strtoupper(clean($_POST['confirm_no'] ?? ''));
@@ -163,9 +146,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div><h1 class="section-title mb-1"><i class="bi bi-receipt" style="color:var(--qmas)"></i> Transaksi & Distribusi</h1><div class="text-muted small">Input penjualan cepat & pencatatan pengiriman ke unit/fakultas</div></div>
-    <button type="button" class="btn btn-sm btn-outline-info" id="btnSetorSemua"
-        data-bs-toggle="modal" data-bs-target="#setorModal"
-        <?= $setorJml < 1 ? 'disabled' : '' ?>><i class="bi bi-bank"></i> Setor Semua Tunai</button>
+    <a href="<?= base_url('/modules/qmas/setor.php') ?>" class="btn btn-sm btn-outline-info"><i class="bi bi-bank"></i> Setor Semua Tunai</a>
 </div>
 
 <?php if ($errors): ?><div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
@@ -335,46 +316,6 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<?php
-$setorJml  = (int) val('SELECT COUNT(*) FROM qmas_transactions WHERE payment_status="tunai"');
-$setorDana = (float) val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE payment_status="tunai"');
-?>
-<!-- Modal setor tunai massal -->
-<div class="modal fade" id="setorModal" tabindex="-1">
-    <div class="modal-dialog"><div class="modal-content">
-        <form method="post">
-            <?php csrf_field(); ?>
-            <input type="hidden" name="action" value="setor_semua">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-bank"></i> Setor Semua Tunai ke Bank</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-info py-2 small mb-3">
-                    <b><?= angka($setorJml) ?> transaksi tunai</b> dengan total <b><?= rupiah($setorDana) ?></b> akan diubah menjadi <b>Transfer</b> sekaligus.
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Bank Tujuan</label>
-                    <select name="bank" id="setorBank" class="form-select" required>
-                        <option value="">-- Pilih Bank --</option>
-                        <option value="BSI">BSI (Bank Syariah Indonesia)</option>
-                        <option value="MUAMALAT">Muamalat</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Tanggal Setor</label>
-                    <input type="date" name="tanggal_setor" class="form-control" value="<?= date('Y-m-d') ?>" required>
-                </div>
-                <div class="form-text small">Semua transaksi berstatus Tunai akan tersetor dalam satu kali proses. Transaksi Transfer &amp; Piutang tidak diubah.</div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
-                <button type="submit" class="btn btn-sm text-white fw-bold" style="background:var(--qmas)" <?= $setorJml < 1 ? 'disabled' : '' ?>><i class="bi bi-check2-circle"></i> Setor Sekarang</button>
-            </div>
-        </form>
-    </div></div>
-</div>
-
 <!-- Modal hapus transaksi -->
 <div class="modal fade" id="hapusModal" tabindex="-1">
     <div class="modal-dialog">
@@ -460,15 +401,6 @@ function toggleLunasBank() {
     lunasBank.required = isTransfer;
 }
 lunasMethod.addEventListener('change', toggleLunasBank);
-
-// Modal setor tunai massal dibuka oleh Bootstrap lewat data-bs-target.
-// JS ini hanya mereset pilihan bank saat tombol diklik.
-var btnSetorSemua = document.getElementById('btnSetorSemua');
-if (btnSetorSemua) {
-    btnSetorSemua.addEventListener('click', function () {
-        document.getElementById('setorBank').value = '';
-    });
-}
 
 // Modal hapus transaksi: konfirmasi dengan mengetik nomor transaksi
 if (typeof bootstrap !== 'undefined') {
