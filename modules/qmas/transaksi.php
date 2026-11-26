@@ -163,7 +163,9 @@ require_once __DIR__ . '/../../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div><h1 class="section-title mb-1"><i class="bi bi-receipt" style="color:var(--qmas)"></i> Transaksi & Distribusi</h1><div class="text-muted small">Input penjualan cepat & pencatatan pengiriman ke unit/fakultas</div></div>
-    <button type="button" class="btn btn-sm btn-outline-info" id="btnSetorSemua" <?= $setorJml < 1 ? 'disabled' : '' ?>><i class="bi bi-bank"></i> Setor Semua Tunai</button>
+    <button type="button" class="btn btn-sm btn-outline-info" id="btnSetorSemua"
+        data-bs-toggle="modal" data-bs-target="#setorModal"
+        <?= $setorJml < 1 ? 'disabled' : '' ?>><i class="bi bi-bank"></i> Setor Semua Tunai</button>
 </div>
 
 <?php if ($errors): ?><div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
@@ -459,16 +461,13 @@ function toggleLunasBank() {
 }
 lunasMethod.addEventListener('change', toggleLunasBank);
 
-// Modal setor tunai massal
-if (typeof bootstrap !== 'undefined') {
-    var setorModal = new bootstrap.Modal(document.getElementById('setorModal'));
-    var btnSetorSemua = document.getElementById('btnSetorSemua');
-    if (btnSetorSemua) {
-        btnSetorSemua.addEventListener('click', function () {
-            document.getElementById('setorBank').value = '';
-            setorModal.show();
-        });
-    }
+// Modal setor tunai massal dibuka oleh Bootstrap lewat data-bs-target.
+// JS ini hanya mereset pilihan bank saat tombol diklik.
+var btnSetorSemua = document.getElementById('btnSetorSemua');
+if (btnSetorSemua) {
+    btnSetorSemua.addEventListener('click', function () {
+        document.getElementById('setorBank').value = '';
+    });
 }
 
 // Modal hapus transaksi: konfirmasi dengan mengetik nomor transaksi
