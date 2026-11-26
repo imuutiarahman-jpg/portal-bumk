@@ -602,6 +602,17 @@ img { max-width: 100%; }
 }
 [data-theme="dark"] .form-control::placeholder, [data-theme="dark"] .form-select::placeholder { opacity: .7; }
 
+/* Perbaiki latar/teks Bootstrap yang tetap terang di mode malam
+   (mis. card-footer.bg-white + .text-muted → teks putih di latar putih).
+   Badge dikecualikan agar badge kuning (bg-warning.text-dark) tetap terbaca. */
+[data-theme="dark"] .bg-white:not(.badge),
+[data-theme="dark"] .bg-light:not(.badge),
+[data-theme="dark"] .table-light:not(.badge) {
+    background-color: var(--card) !important;
+    color: var(--ink) !important;
+}
+[data-theme="dark"] .text-dark:not(.badge) { color: var(--ink) !important; }
+
 /* Tombol toggle tema */
 .theme-toggle { min-width: 36px; padding-left: 10px; padding-right: 10px; }
 .theme-toggle i { font-size: 14px; }
