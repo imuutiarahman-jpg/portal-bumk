@@ -9,7 +9,8 @@ $activeUnit = 'qmas';
 $omzetToday = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE DATE(transaction_date)=CURDATE()');
 $galonToday = val('SELECT COALESCE(SUM(i.quantity),0) FROM qmas_transaction_items i JOIN qmas_products p ON p.id=i.product_id JOIN qmas_transactions t ON t.id=i.transaction_id WHERE p.kind="galon" AND DATE(t.transaction_date)=CURDATE()');
 // DUS TERJUAL: item non-galon yang terjual hari ini (galon punya KPI tersendiri).
-$dusToday   = val('SELECT COALESCE(SUM(i.quantity),0) FROM qmas_transaction_items i JOIN qmas_products p ON p.id=i.product_id JOIN qmas_transactions t ON t.id=i.transaction_id WHERE p.kind <> "galon" AND DATE(t.transaction_date)=CURDATE()');
+// Galon dikecualikan lewat kind DAN sku, jadi aman kalau data kind lama tidak konsisten.
+$dusToday   = val('SELECT COALESCE(SUM(i.quantity),0) FROM qmas_transaction_items i JOIN qmas_products p ON p.id=i.product_id JOIN qmas_transactions t ON t.id=i.transaction_id WHERE (p.kind <> "galon" OR p.kind IS NULL) AND p.sku <> "QMS-G19" AND DATE(t.transaction_date)=CURDATE()');
 $stokTotal  = val('SELECT COALESCE(SUM(stock),0) FROM qmas_products WHERE is_active=1');
 $piutang    = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE payment_status="piutang"');
 $piutangLunas = val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE payment_status="piutang" AND lunas_date IS NOT NULL');
@@ -33,7 +34,7 @@ foreach ($comp as $c) { $compLabels[] = payment_label($c['status'], $c['bank']);
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
-
+<!-- qmas-dashboard-v3-dus-non-galon -->
 <div class="page-head">
     <div>
         <div class="section-eyebrow">Unit Usaha · Qmas</div>
