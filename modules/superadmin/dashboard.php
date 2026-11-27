@@ -187,7 +187,7 @@ if ($grandLaba != 0 || ($saColumn('qmas_transaction_items', 'unit_cost') && $saC
               FROM qmas_transaction_items i JOIN qmas_transactions t ON t.id=i.transaction_id
               WHERE DATE(t.transaction_date) BETWEEN ? AND ? GROUP BY periode
             UNION ALL
-              SELECT DATE_FORMAT(t.transaction_date,'%Y-%m'), SUM(i.subtotal - i.quantity*i.unit_cost)
+              SELECT DATE_FORMAT(t.transaction_date,'%Y-%m') AS periode, SUM(i.subtotal - i.quantity*i.unit_cost) AS laba
               FROM sm_transaction_items i JOIN sm_transactions t ON t.id=i.transaction_id
               WHERE DATE(t.transaction_date) BETWEEN ? AND ? GROUP BY periode", [$from, $to, $from, $to]);
     }, []);
@@ -222,7 +222,7 @@ $payRows = $saSafe('Komposisi pembayaran', function () use ($from, $to) {
     return all("SELECT " . qmas_laporan_status_sql() . " status, bank, total_amount FROM qmas_transactions
             WHERE DATE(transaction_date) BETWEEN ? AND ?
         UNION ALL
-        SELECT payment_status, NULL, total_amount FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+        SELECT payment_method, NULL, total_amount FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
         UNION ALL
         SELECT payment_method, NULL, total_amount FROM daqam_orders
             WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?",
