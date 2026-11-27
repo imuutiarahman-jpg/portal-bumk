@@ -58,7 +58,7 @@ $unitMenus = [
     </script>
     <link href="<?= base_url('/assets/vendor/bootstrap/bootstrap.min.css') ?>?v=1" rel="stylesheet" onerror="this.href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css'">
     <link href="<?= base_url('/assets/vendor/bootstrap-icons/bootstrap-icons.min.css') ?>?v=1" rel="stylesheet">
-    <link href="<?= base_url('/assets/css/style.css') ?>?v=13" rel="stylesheet">
+    <link href="<?= base_url('/assets/css/style.css') ?>?v=14" rel="stylesheet">
     <script src="<?= base_url('/assets/vendor/bootstrap/bootstrap.bundle.min.js') ?>?v=2"></script>
     <script>window.bootstrap || document.write('<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"><\/script>');</script>
     <script src="<?= base_url('/assets/vendor/chartjs/chart.umd.min.js') ?>?v=1"></script>
@@ -119,11 +119,15 @@ $unitMenus = [
             <?php if ($user['role'] === 'super_admin'): ?>
                 <div class="sidebar-label mt-3">PIMPINAN</div>
                 <a href="<?= base_url('/modules/superadmin/dashboard.php') ?>" class="sidebar-link <?= str_contains($_SERVER['PHP_SELF'], 'superadmin/dashboard') ? 'active' : '' ?>"><i class="bi bi-bar-chart-line"></i> Omzet Gabungan</a>
+                <?php
+                $unitShort = ['qmas' => 'Qmas', 'smcorner' => 'SM Corner', 'daqam' => 'Daqam'];
+                $unitIcon  = ['qmas' => 'bi-droplet', 'smcorner' => 'bi-bag', 'daqam' => 'bi-cup-hot'];
+                ?>
                 <div class="sidebar-label mt-3">UNIT USAHA</div>
                 <?php foreach (['qmas', 'smcorner', 'daqam'] as $code): $u = unit_by_code($code); ?>
                     <details class="sidebar-group" <?= $activeUnit === $code ? 'open' : '' ?>>
-                        <summary class="sidebar-unit-toggle">
-                            <span><?= e($u['name'] ?? $code) ?></span>
+                        <summary class="sidebar-unit-toggle" title="<?= e($u['name'] ?? $code) ?>">
+                            <span><i class="bi <?= e($unitIcon[$code] ?? 'bi-grid') ?>"></i> <?= e($unitShort[$code] ?? $code) ?></span>
                             <i class="bi bi-chevron-down"></i>
                         </summary>
                         <div class="sidebar-group-links">

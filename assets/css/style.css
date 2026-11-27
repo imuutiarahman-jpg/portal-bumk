@@ -376,9 +376,14 @@ img { max-width: 100%; }
 .sidebar-group > summary::-webkit-details-marker { display: none; }
 .sidebar-group > summary:hover { background: rgba(255,255,255,.09); color: #fff; }
 .sidebar-group > summary:focus-visible { outline: 2px solid var(--brand-teal); outline-offset: 2px; }
-.sidebar-group > summary i { font-size: 11px; opacity: .8; transition: transform .18s ease; }
+.sidebar-group > summary > i { font-size: 11px; opacity: .8; flex: 0 0 auto; transition: transform .18s ease; }
+.sidebar-group > summary span {
+    display: inline-flex; align-items: center; gap: 8px;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sidebar-group > summary span i { font-size: 12px; opacity: .85; flex: 0 0 auto; }
 .sidebar-group[open] > summary { background: rgba(255,255,255,.06); color: #fff; }
-.sidebar-group[open] > summary i { transform: rotate(180deg); }
+.sidebar-group[open] > summary > i { transform: rotate(180deg); }
 .sidebar-group-links { padding: 2px 0 6px 3px; }
 .sidebar-link {
     display: flex; align-items: center; gap: 9px;
