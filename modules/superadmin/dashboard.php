@@ -3,8 +3,41 @@ require_once __DIR__ . '/../../config/app.php';
 require_login();
 require_role(['super_admin']);
 
+/* Tampilkan pesan error yang jelas (bukan 500 kosong) bila masih ada masalah. */
+set_exception_handler(static function (Throwable $ex): void {
+    if (!headers_sent()) http_response_code(500);
+    echo '<div class="alert alert-danger m-4"><b>Dashboard gagal dimuat.</b><br><small>' . e($ex->getMessage()) . '</small></div>';
+});
+
 $title = 'Ringkasan Omzet Gabungan';
 $activeUnit = null;
+
+/* ------------------------------------------------------------------
+   Pengaman: bagian yang belum tersedia di DB hosting dilewati, bukan error.
+   ------------------------------------------------------------------ */
+$saIssues = [];
+$saSafe = static function (string $label, callable $fn, $fallback) use (&$saIssues) {
+    try {
+        return $fn();
+    } catch (Throwable $e) {
+        $saIssues[] = $label . ': ' . $e->getMessage();
+        return $fallback;
+    }
+};
+$saTable = static function (string $table): bool {
+    try {
+        return (bool) val('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?', [$table]);
+    } catch (Throwable $e) {
+        return false;
+    }
+};
+$saColumn = static function (string $table, string $column): bool {
+    try {
+        return (bool) val('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [$table, $column]);
+    } catch (Throwable $e) {
+        return false;
+    }
+};
 
 /* ==================================================================
    Filter periode (default: tahun berjalan s/d hari ini)
@@ -28,6 +61,8 @@ if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromRaw) && preg_match('/^\d{4}-\d{2}-\
         $to = $swap;
     }
 }
+if (!strtotime($from)) $from = $yearStart;
+if (!strtotime($to)) $to = $today;
 
 $presets = [
     'Bulan ini' => [$monthStart, $today],
@@ -37,22 +72,23 @@ $presets = [
     (string) $cy       => [$cy . '-01-01', $cy . '-12-31'],
 ];
 
+/* Sumber data tiap unit (dipakai berulang, aman per unit). */
+$unitSources = [
+    'qmas' => ['table' => 'qmas_transactions', 'date' => 'transaction_date', 'filter' => ''],
+    'smcorner' => ['table' => 'sm_transactions', 'date' => 'transaction_date', 'filter' => ''],
+    'daqam' => ['table' => 'daqam_orders', 'date' => 'order_date', 'filter' => "status='selesai' AND "],
+];
+
 /* ==================================================================
    Omzet & transaksi per unit
    ================================================================== */
-$omzetRows = all("SELECT 'qmas' code, COALESCE(SUM(total_amount),0) omzet, COUNT(*) trx
-        FROM qmas_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
-    UNION ALL
-    SELECT 'smcorner', COALESCE(SUM(total_amount),0), COUNT(*)
-        FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
-    UNION ALL
-    SELECT 'daqam', COALESCE(SUM(total_amount),0), COUNT(*)
-        FROM daqam_orders WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?",
-    [$from, $to, $from, $to, $from, $to]);
-
 $byCode = [];
-foreach ($omzetRows as $o) {
-    $byCode[$o['code']] = ['omzet' => (float) $o['omzet'], 'trx' => (int) $o['trx']];
+foreach ($unitSources as $code => $src) {
+    $o = $saSafe('Omzet ' . $code, function () use ($src, $from, $to) {
+        return row('SELECT COALESCE(SUM(total_amount),0) omzet, COUNT(*) trx FROM ' . $src['table']
+            . ' WHERE ' . $src['filter'] . 'DATE(' . $src['date'] . ') BETWEEN ? AND ?', [$from, $to]);
+    }, ['omzet' => 0, 'trx' => 0]);
+    $byCode[$code] = ['omzet' => (float) ($o['omzet'] ?? 0), 'trx' => (int) ($o['trx'] ?? 0)];
 }
 $grandOmzet = 0.0;
 $grandTrx = 0;
@@ -68,58 +104,94 @@ foreach (['qmas', 'smcorner', 'daqam'] as $code) {
     $unitMeta[$code] = $u['name'] ?? $code;
 }
 
+$todayByCode = [];
+foreach ($unitSources as $code => $src) {
+    $todayByCode[$code] = (float) $saSafe('Omzet hari ini ' . $code, function () use ($src) {
+        return val('SELECT COALESCE(SUM(total_amount),0) FROM ' . $src['table']
+            . ' WHERE ' . $src['filter'] . 'DATE(' . $src['date'] . ')=CURDATE()');
+    }, 0);
+}
+$todayOmzet = array_sum($todayByCode);
+
 /* ==================================================================
-   Laba (Qmas + SM Corner; Daqam belum punya HPP per menu/order)
+   Laba (Qmas + SM Corner; dilewati bila kolom unit_cost belum ada)
    ================================================================== */
-$labaQ = (float) val("SELECT COALESCE(SUM(i.subtotal - i.quantity*i.unit_cost),0)
-    FROM qmas_transaction_items i JOIN qmas_transactions t ON t.id=i.transaction_id
-    WHERE DATE(t.transaction_date) BETWEEN ? AND ?", [$from, $to]);
-$labaS = (float) val("SELECT COALESCE(SUM(i.subtotal - i.quantity*i.unit_cost),0)
-    FROM sm_transaction_items i JOIN sm_transactions t ON t.id=i.transaction_id
-    WHERE DATE(t.transaction_date) BETWEEN ? AND ?", [$from, $to]);
+$labaQ = 0.0;
+$labaS = 0.0;
+if ($saColumn('qmas_transaction_items', 'unit_cost')) {
+    $labaQ = (float) $saSafe('Laba Qmas', function () use ($from, $to) {
+        return val("SELECT COALESCE(SUM(i.subtotal - i.quantity*i.unit_cost),0)
+            FROM qmas_transaction_items i JOIN qmas_transactions t ON t.id=i.transaction_id
+            WHERE DATE(t.transaction_date) BETWEEN ? AND ?", [$from, $to]);
+    }, 0);
+} else {
+    $saIssues[] = 'Laba Qmas dilewati (kolom unit_cost belum ada)';
+}
+if ($saColumn('sm_transaction_items', 'unit_cost')) {
+    $labaS = (float) $saSafe('Laba SM Corner', function () use ($from, $to) {
+        return val("SELECT COALESCE(SUM(i.subtotal - i.quantity*i.unit_cost),0)
+            FROM sm_transaction_items i JOIN sm_transactions t ON t.id=i.transaction_id
+            WHERE DATE(t.transaction_date) BETWEEN ? AND ?", [$from, $to]);
+    }, 0);
+} else {
+    $saIssues[] = 'Laba SM Corner dilewati (kolom unit_cost belum ada)';
+}
 $grandLaba = $labaQ + $labaS;
 $margin = $grandOmzet > 0 ? ($grandLaba / $grandOmzet) * 100 : 0.0;
-
-$todayByCode = [
-    'qmas' => (float) val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE DATE(transaction_date)=CURDATE()'),
-    'smcorner' => (float) val('SELECT COALESCE(SUM(total_amount),0) FROM sm_transactions WHERE DATE(transaction_date)=CURDATE()'),
-    'daqam' => (float) val("SELECT COALESCE(SUM(total_amount),0) FROM daqam_orders WHERE status='selesai' AND DATE(order_date)=CURDATE()"),
-];
-$todayOmzet = array_sum($todayByCode);
 
 /* ==================================================================
    Piutang pelanggan & hutang supplier
    ================================================================== */
-$piutang = (float) val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions
-    WHERE payment_status="piutang" AND DATE(transaction_date) BETWEEN ? AND ?', [$from, $to]);
-$piutangNota = (int) val('SELECT COUNT(*) FROM qmas_transactions
-    WHERE payment_status="piutang" AND DATE(transaction_date) BETWEEN ? AND ?', [$from, $to]);
-$hutangQ = (float) val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_purchases
-    WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to]);
-$hutangS = (float) val('SELECT COALESCE(SUM(total_amount),0) FROM sm_purchases
-    WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to]);
-$hutangNota = (int) val('SELECT COUNT(*) FROM qmas_purchases
-    WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to])
-    + (int) val('SELECT COUNT(*) FROM sm_purchases
-    WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to]);
-$hutang = $hutangQ + $hutangS;
+$piutang = (float) $saSafe('Piutang Qmas', function () use ($from, $to) {
+    return val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions
+        WHERE payment_status="piutang" AND DATE(transaction_date) BETWEEN ? AND ?', [$from, $to]);
+}, 0);
+$piutangNota = (int) $saSafe('Jumlah nota piutang', function () use ($from, $to) {
+    return val('SELECT COUNT(*) FROM qmas_transactions
+        WHERE payment_status="piutang" AND DATE(transaction_date) BETWEEN ? AND ?', [$from, $to]);
+}, 0);
+
+$hutang = 0.0;
+$hutangNota = 0;
+foreach (['qmas' => 'qmas_purchases', 'smcorner' => 'sm_purchases'] as $label => $table) {
+    if (!$saTable($table)) {
+        $saIssues[] = 'Hutang ' . $label . ' dilewati (tabel ' . $table . ' belum ada)';
+        continue;
+    }
+    $hutang += (float) $saSafe('Hutang ' . $label, function () use ($table, $from, $to) {
+        return val('SELECT COALESCE(SUM(total_amount),0) FROM ' . $table
+            . ' WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to]);
+    }, 0);
+    $hutangNota += (int) $saSafe('Nota hutang ' . $label, function () use ($table, $from, $to) {
+        return val('SELECT COUNT(*) FROM ' . $table
+            . ' WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to]);
+    }, 0);
+}
 $tagihan = $piutang + $hutang;
 
 /* ==================================================================
    Tren omzet & laba
    ================================================================== */
-$trendOmzet = all("SELECT DATE_FORMAT(waktu,'%Y-%m') periode, SUM(total) omzet FROM (
-      SELECT transaction_date waktu, total_amount total FROM qmas_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
-      UNION ALL SELECT transaction_date, total_amount FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
-      UNION ALL SELECT order_date, total_amount FROM daqam_orders WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?
-    ) x GROUP BY periode ORDER BY periode", [$from, $to, $from, $to, $from, $to]);
-$trendLaba = all("SELECT DATE_FORMAT(t.transaction_date,'%Y-%m') periode, SUM(i.subtotal - i.quantity*i.unit_cost) laba
-      FROM qmas_transaction_items i JOIN qmas_transactions t ON t.id=i.transaction_id
-      WHERE DATE(t.transaction_date) BETWEEN ? AND ? GROUP BY periode
-    UNION ALL
-      SELECT DATE_FORMAT(t.transaction_date,'%Y-%m'), SUM(i.subtotal - i.quantity*i.unit_cost)
-      FROM sm_transaction_items i JOIN sm_transactions t ON t.id=i.transaction_id
-      WHERE DATE(t.transaction_date) BETWEEN ? AND ? GROUP BY periode", [$from, $to, $from, $to]);
+$trendOmzet = $saSafe('Tren omzet', function () use ($from, $to) {
+    return all("SELECT DATE_FORMAT(waktu,'%Y-%m') periode, SUM(total) omzet FROM (
+          SELECT transaction_date waktu, total_amount total FROM qmas_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+          UNION ALL SELECT transaction_date, total_amount FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+          UNION ALL SELECT order_date, total_amount FROM daqam_orders WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?
+        ) x GROUP BY periode ORDER BY periode", [$from, $to, $from, $to, $from, $to]);
+}, []);
+
+$trendLaba = [];
+if ($grandLaba != 0 || ($saColumn('qmas_transaction_items', 'unit_cost') && $saColumn('sm_transaction_items', 'unit_cost'))) {
+    $trendLaba = $saSafe('Tren laba', function () use ($from, $to) {
+        return all("SELECT DATE_FORMAT(t.transaction_date,'%Y-%m') periode, SUM(i.subtotal - i.quantity*i.unit_cost) laba
+              FROM qmas_transaction_items i JOIN qmas_transactions t ON t.id=i.transaction_id
+              WHERE DATE(t.transaction_date) BETWEEN ? AND ? GROUP BY periode
+            UNION ALL
+              SELECT DATE_FORMAT(t.transaction_date,'%Y-%m'), SUM(i.subtotal - i.quantity*i.unit_cost)
+              FROM sm_transaction_items i JOIN sm_transactions t ON t.id=i.transaction_id
+              WHERE DATE(t.transaction_date) BETWEEN ? AND ? GROUP BY periode", [$from, $to, $from, $to]);
+    }, []);
+}
 
 $trendMap = [];
 foreach ($trendOmzet as $r) {
@@ -142,16 +214,20 @@ foreach ($trendMap as $periode => $v) {
 /* ==================================================================
    Komposisi pembayaran seluruh unit
    ================================================================== */
-$payRows = all("SELECT " . qmas_laporan_status_sql() . " status, bank, total_amount FROM qmas_transactions
-        WHERE DATE(transaction_date) BETWEEN ? AND ?
-    UNION ALL
-    SELECT payment_status, NULL, total_amount FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
-    UNION ALL
-    SELECT payment_method, NULL, total_amount FROM daqam_orders
-        WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?",
-    [$from, $to, $from, $to, $from, $to]);
-$methodLabel = static fn(string $status): string => $status === 'qris' ? 'QRIS' : ucfirst($status);
+$methodLabel = static function (string $status): string {
+    return $status === 'qris' ? 'QRIS' : ucfirst($status);
+};
 
+$payRows = $saSafe('Komposisi pembayaran', function () use ($from, $to) {
+    return all("SELECT " . qmas_laporan_status_sql() . " status, bank, total_amount FROM qmas_transactions
+            WHERE DATE(transaction_date) BETWEEN ? AND ?
+        UNION ALL
+        SELECT payment_status, NULL, total_amount FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+        UNION ALL
+        SELECT payment_method, NULL, total_amount FROM daqam_orders
+            WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?",
+        [$from, $to, $from, $to, $from, $to]);
+}, []);
 $payMap = [];
 foreach ($payRows as $r) {
     $label = $r['bank'] ? payment_label((string) $r['status'], $r['bank']) : $methodLabel((string) $r['status']);
@@ -164,19 +240,21 @@ $payData = array_values($payMap);
 /* ==================================================================
    Transaksi terbaru seluruh unit (dalam rentang)
    ================================================================== */
-$recent = all("SELECT * FROM (
-      SELECT 'Qmas Air Mineral' unit, transaction_no no, transaction_date waktu, customer_name nama,
-             total_amount total, payment_status status, bank, 'qmas' code
-        FROM qmas_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
-      UNION ALL
-      SELECT 'SM Corner', transaction_no, transaction_date, customer_name, total_amount,
-             payment_method, NULL, 'smcorner'
-        FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
-      UNION ALL
-      SELECT 'Daqam Caffe', order_no, order_date, CONCAT(order_type,' ',IFNULL(table_no,'')),
-             total_amount, payment_method, NULL, 'daqam'
-        FROM daqam_orders WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?
-    ) x ORDER BY waktu DESC LIMIT 10", [$from, $to, $from, $to, $from, $to]);
+$recent = $saSafe('Transaksi terbaru', function () use ($from, $to) {
+    return all("SELECT * FROM (
+          SELECT 'Qmas Air Mineral' unit, transaction_no no, transaction_date waktu, customer_name nama,
+                 total_amount total, payment_status status, bank, 'qmas' code
+            FROM qmas_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+          UNION ALL
+          SELECT 'SM Corner', transaction_no, transaction_date, customer_name, total_amount,
+                 payment_method, NULL, 'smcorner'
+            FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+          UNION ALL
+          SELECT 'Daqam Caffe', order_no, order_date, CONCAT(order_type,' ',IFNULL(table_no,'')),
+                 total_amount, payment_method, NULL, 'daqam'
+            FROM daqam_orders WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?
+        ) x ORDER BY waktu DESC LIMIT 10", [$from, $to, $from, $to, $from, $to]);
+}, []);
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -192,6 +270,13 @@ require_once __DIR__ . '/../../includes/header.php';
         <a href="<?= base_url('/modules/portal/index.php') ?>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Portal</a>
     </div>
 </div>
+
+<?php if ($saIssues): ?>
+<div class="alert alert-warning small">
+    <b>Catatan data:</b> beberapa bagian tidak dapat dihitung dan ditampilkan sebagai 0.<br>
+    <?= implode('<br>', array_map('e', $saIssues)) ?>
+</div>
+<?php endif; ?>
 
 <div class="card content-card mb-3">
     <div class="card-body">
@@ -227,7 +312,6 @@ $kpiCard = static function (string $label, string $value, string $foot, string $
     }
     echo '</div></div>';
 };
-
 ?>
 
 <div class="row g-3 mb-4">
