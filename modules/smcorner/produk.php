@@ -211,7 +211,9 @@ $pageUrl = static function (int $p) use ($q, $categoryFilter, $stockFilter): str
 $products = all('SELECT p.*, c.name category_name,
     (SELECT COUNT(*) FROM sm_product_variants v WHERE v.product_id=p.id) variant_count,
     (SELECT MIN(v.price) FROM sm_product_variants v WHERE v.product_id=p.id) variant_min,
-    (SELECT MAX(v.price) FROM sm_product_variants v WHERE v.product_id=p.id) variant_max
+    (SELECT MAX(v.price) FROM sm_product_variants v WHERE v.product_id=p.id) variant_max,
+    (SELECT MIN(v.cost) FROM sm_product_variants v WHERE v.product_id=p.id) variant_cost_min,
+    (SELECT MAX(v.cost) FROM sm_product_variants v WHERE v.product_id=p.id) variant_cost_max
     FROM sm_products p JOIN sm_categories c ON c.id=p.category_id ' . $whereSql
     . ' ORDER BY c.name, p.name LIMIT ' . $perPage . ' OFFSET ' . $offset, $params);
 
@@ -280,22 +282,38 @@ require_once __DIR__ . '/../../includes/header.php';
                 <span class="badge bg-light text-dark"><?= angka($totalProducts) ?> produk</span>
             </div>
             <div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle">
-                <thead class="table-light"><tr><th>Produk</th><th>SKU</th><th>Kategori</th><th>Ukuran</th><th>Varian</th><th class="text-end">Harga</th><th class="text-end">HPP</th><th class="text-end">Stok</th><th>Aksi</th></tr></thead>
+                <thead class="table-light"><tr><th>Produk</th><th>Kategori · Ukuran</th><th>Varian</th><th class="text-end">Harga · HPP</th><th class="text-end">Stok</th><th>Aksi</th></tr></thead>
                 <tbody>
-                <?php if (!$products): ?><tr><td colspan="9" class="empty-state">Tidak ada produk yang cocok dengan filter.</td></tr><?php endif; ?>
-                <?php foreach ($products as $p): ?>
+                <?php if (!$products): ?><tr><td colspan="6" class="empty-state">Tidak ada produk yang cocok dengan filter.</td></tr><?php endif; ?>
+                <?php foreach ($products as $p):
+                    $costMin = (float) $p['variant_cost_min'];
+                    $costMax = (float) $p['variant_cost_max'];
+                ?>
                     <tr>
-                        <td class="small fw-semibold"><?= e($p['name']) ?></td>
-                        <td class="small"><?= e($p['sku']) ?></td>
-                        <td class="small"><?= e($p['category_name']) ?></td>
-                        <td class="small"><?= e($p['size']) ?></td>
-                        <td class="small"><?php if ($p['variant_count']): ?><span class="badge bg-light text-dark"><?= (int) $p['variant_count'] ?> ukuran</span><div class="small text-muted"><?= rupiah($p['variant_min']) ?>–<?= rupiah($p['variant_max']) ?></div><?php else: ?>—<?php endif; ?></td>
-                        <td class="text-end small"><?= rupiah($p['price']) ?></td>
-                        <td class="text-end small"><?= rupiah($p['cost']) ?></td>
-                        <td class="text-end"><span class="badge bg-<?= $p['stock'] <= $p['min_stock'] ? 'danger' : 'success' ?>"><?= angka($p['stock']) . ' ' . e($p['unit']) ?></span></td>
+                        <td class="small">
+                            <div class="fw-semibold"><?= e($p['name']) ?></div>
+                            <div class="text-muted"><?= e($p['sku']) ?></div>
+                        </td>
+                        <td class="small">
+                            <div><?= e($p['category_name']) ?></div>
+                            <div class="text-muted"><?= e($p['size']) ?></div>
+                        </td>
+                        <td class="small"><?php if ($p['variant_count']): ?><span class="badge bg-light text-dark"><?= (int) $p['variant_count'] ?> ukuran</span><div class="text-muted"><?= rupiah($p['variant_min']) ?>–<?= rupiah($p['variant_max']) ?></div><?php else: ?>—<?php endif; ?></td>
+                        <td class="text-end small">
+                            <div class="fw-semibold"><?= rupiah($p['price']) ?></div>
+                            <?php if ($p['variant_count']): ?>
+                                <div class="text-muted" title="HPP per ukuran">HPP <?= $costMin == $costMax ? rupiah($costMin) : rupiah($costMin) . '–' . rupiah($costMax) ?></div>
+                            <?php else: ?>
+                                <div class="text-muted">HPP <?= rupiah($p['cost']) ?></div>
+                            <?php endif; ?>
+                        </td>
+                        <td class="text-end">
+                            <span class="badge bg-<?= $p['stock'] <= $p['min_stock'] ? 'danger' : 'success' ?>" title="Min. stok: <?= angka($p['min_stock']) ?> <?= e($p['unit']) ?>"><?= angka($p['stock']) . ' ' . e($p['unit']) ?></span>
+                            <div class="small text-muted">min <?= angka($p['min_stock']) ?></div>
+                        </td>
                         <td class="text-nowrap">
                             <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Aksi</button>
+                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Aksi untuk <?= e($p['name']) ?>"><i class="bi bi-three-dots-vertical"></i></button>
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><button type="button" class="dropdown-item btn-setstock" data-id="<?= (int) $p['id'] ?>" data-name="<?= e($p['name']) ?>" data-stock="<?= (int) $p['stock'] ?>"><i class="bi bi-box-arrow-in-down me-2"></i>Set Stok</button></li>
                                     <li><button type="button" class="dropdown-item btn-edit" data-id="<?= (int) $p['id'] ?>"><i class="bi bi-pencil me-2"></i>Ubah</button></li>
