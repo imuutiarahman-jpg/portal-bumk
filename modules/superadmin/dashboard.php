@@ -6,53 +6,177 @@ require_role(['super_admin']);
 $title = 'Ringkasan Omzet Gabungan';
 $activeUnit = null;
 
-$omzet = all("SELECT 'qmas' AS code, SUM(CASE WHEN DATE(transaction_date)=CURDATE() THEN total_amount ELSE 0 END) AS today,
-                     SUM(CASE WHEN DATE_FORMAT(transaction_date,'%Y-%m')=DATE_FORMAT(CURDATE(),'%Y-%m') THEN total_amount ELSE 0 END) AS month,
-                     SUM(total_amount) AS total, COUNT(*) AS trx FROM qmas_transactions
-              UNION ALL
-              SELECT 'smcorner', SUM(CASE WHEN DATE(transaction_date)=CURDATE() THEN total_amount ELSE 0 END),
-                     SUM(CASE WHEN DATE_FORMAT(transaction_date,'%Y-%m')=DATE_FORMAT(CURDATE(),'%Y-%m') THEN total_amount ELSE 0 END),
-                     SUM(total_amount), COUNT(*) FROM sm_transactions
-              UNION ALL
-              SELECT 'daqam', SUM(CASE WHEN DATE(order_date)=CURDATE() THEN total_amount ELSE 0 END),
-                     SUM(CASE WHEN DATE_FORMAT(order_date,'%Y-%m')=DATE_FORMAT(CURDATE(),'%Y-%m') THEN total_amount ELSE 0 END),
-                     SUM(total_amount), COUNT(*) FROM daqam_orders WHERE status='selesai'");
+/* ==================================================================
+   Filter periode (default: tahun berjalan s/d hari ini)
+   ================================================================== */
+$today = date('Y-m-d');
+$cy = (int) date('Y');
+$yearStart = $cy . '-01-01';
+$monthStart = date('Y-m-01');
+$threeMonthStart = date('Y-m-d', strtotime('-2 months', strtotime($monthStart)));
 
-$grandToday = 0; $grandMonth = 0; $grandTotal = 0; $grandTrx = 0;
-foreach ($omzet as $o) {
-    $grandToday += (float) $o['today'];
-    $grandMonth += (float) $o['month'];
-    $grandTotal += (float) $o['total'];
-    $grandTrx += (int) $o['trx'];
+$from = $yearStart;
+$to = $today;
+$fromRaw = (string) ($_GET['from'] ?? '');
+$toRaw = (string) ($_GET['to'] ?? '');
+if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromRaw) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $toRaw)) {
+    $from = $fromRaw;
+    $to = $toRaw;
+    if ($from > $to) {
+        $swap = $from;
+        $from = $to;
+        $to = $swap;
+    }
 }
-$avgTrx = $grandTrx > 0 ? $grandTotal / $grandTrx : 0;
 
+$presets = [
+    'Bulan ini' => [$monthStart, $today],
+    '3 Bulan'   => [$threeMonthStart, $today],
+    'Tahun ini' => [$yearStart, $today],
+    (string) ($cy - 1) => [($cy - 1) . '-01-01', ($cy - 1) . '-12-31'],
+    (string) $cy       => [$cy . '-01-01', $cy . '-12-31'],
+];
+
+/* ==================================================================
+   Omzet & transaksi per unit
+   ================================================================== */
+$omzetRows = all("SELECT 'qmas' code, COALESCE(SUM(total_amount),0) omzet, COUNT(*) trx
+        FROM qmas_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+    UNION ALL
+    SELECT 'smcorner', COALESCE(SUM(total_amount),0), COUNT(*)
+        FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+    UNION ALL
+    SELECT 'daqam', COALESCE(SUM(total_amount),0), COUNT(*)
+        FROM daqam_orders WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?",
+    [$from, $to, $from, $to, $from, $to]);
+
+$byCode = [];
+foreach ($omzetRows as $o) {
+    $byCode[$o['code']] = ['omzet' => (float) $o['omzet'], 'trx' => (int) $o['trx']];
+}
+$grandOmzet = 0.0;
+$grandTrx = 0;
+foreach ($byCode as $v) {
+    $grandOmzet += $v['omzet'];
+    $grandTrx += $v['trx'];
+}
+$avgTrx = $grandTrx > 0 ? $grandOmzet / $grandTrx : 0.0;
+
+$unitMeta = [];
+foreach (['qmas', 'smcorner', 'daqam'] as $code) {
+    $u = unit_by_code($code);
+    $unitMeta[$code] = $u['name'] ?? $code;
+}
+
+/* ==================================================================
+   Laba (Qmas + SM Corner; Daqam belum punya HPP per menu/order)
+   ================================================================== */
+$labaQ = (float) val("SELECT COALESCE(SUM(i.subtotal - i.quantity*i.unit_cost),0)
+    FROM qmas_transaction_items i JOIN qmas_transactions t ON t.id=i.transaction_id
+    WHERE DATE(t.transaction_date) BETWEEN ? AND ?", [$from, $to]);
+$labaS = (float) val("SELECT COALESCE(SUM(i.subtotal - i.quantity*i.unit_cost),0)
+    FROM sm_transaction_items i JOIN sm_transactions t ON t.id=i.transaction_id
+    WHERE DATE(t.transaction_date) BETWEEN ? AND ?", [$from, $to]);
+$grandLaba = $labaQ + $labaS;
+$margin = $grandOmzet > 0 ? ($grandLaba / $grandOmzet) * 100 : 0.0;
+
+$todayByCode = [
+    'qmas' => (float) val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions WHERE DATE(transaction_date)=CURDATE()'),
+    'smcorner' => (float) val('SELECT COALESCE(SUM(total_amount),0) FROM sm_transactions WHERE DATE(transaction_date)=CURDATE()'),
+    'daqam' => (float) val("SELECT COALESCE(SUM(total_amount),0) FROM daqam_orders WHERE status='selesai' AND DATE(order_date)=CURDATE()"),
+];
+$todayOmzet = array_sum($todayByCode);
+
+/* ==================================================================
+   Piutang pelanggan & hutang supplier
+   ================================================================== */
+$piutang = (float) val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_transactions
+    WHERE payment_status="piutang" AND DATE(transaction_date) BETWEEN ? AND ?', [$from, $to]);
+$piutangNota = (int) val('SELECT COUNT(*) FROM qmas_transactions
+    WHERE payment_status="piutang" AND DATE(transaction_date) BETWEEN ? AND ?', [$from, $to]);
+$hutangQ = (float) val('SELECT COALESCE(SUM(total_amount),0) FROM qmas_purchases
+    WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to]);
+$hutangS = (float) val('SELECT COALESCE(SUM(total_amount),0) FROM sm_purchases
+    WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to]);
+$hutangNota = (int) val('SELECT COUNT(*) FROM qmas_purchases
+    WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to])
+    + (int) val('SELECT COUNT(*) FROM sm_purchases
+    WHERE payment_status="piutang" AND DATE(purchase_date) BETWEEN ? AND ?', [$from, $to]);
+$hutang = $hutangQ + $hutangS;
+$tagihan = $piutang + $hutang;
+
+/* ==================================================================
+   Tren omzet & laba
+   ================================================================== */
+$trendOmzet = all("SELECT DATE_FORMAT(waktu,'%Y-%m') periode, SUM(total) omzet FROM (
+      SELECT transaction_date waktu, total_amount total FROM qmas_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+      UNION ALL SELECT transaction_date, total_amount FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+      UNION ALL SELECT order_date, total_amount FROM daqam_orders WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?
+    ) x GROUP BY periode ORDER BY periode", [$from, $to, $from, $to, $from, $to]);
+$trendLaba = all("SELECT DATE_FORMAT(t.transaction_date,'%Y-%m') periode, SUM(i.subtotal - i.quantity*i.unit_cost) laba
+      FROM qmas_transaction_items i JOIN qmas_transactions t ON t.id=i.transaction_id
+      WHERE DATE(t.transaction_date) BETWEEN ? AND ? GROUP BY periode
+    UNION ALL
+      SELECT DATE_FORMAT(t.transaction_date,'%Y-%m'), SUM(i.subtotal - i.quantity*i.unit_cost)
+      FROM sm_transaction_items i JOIN sm_transactions t ON t.id=i.transaction_id
+      WHERE DATE(t.transaction_date) BETWEEN ? AND ? GROUP BY periode", [$from, $to, $from, $to]);
+
+$trendMap = [];
+foreach ($trendOmzet as $r) {
+    $trendMap[$r['periode']] = ['omzet' => (float) $r['omzet'], 'laba' => 0.0];
+}
+foreach ($trendLaba as $r) {
+    if (!isset($trendMap[$r['periode']])) $trendMap[$r['periode']] = ['omzet' => 0.0, 'laba' => 0.0];
+    $trendMap[$r['periode']]['laba'] = (float) $r['laba'];
+}
+ksort($trendMap);
+$trendLabels = [];
+$trendOmzetData = [];
+$trendLabaData = [];
+foreach ($trendMap as $periode => $v) {
+    $trendLabels[] = date('M Y', strtotime($periode . '-01'));
+    $trendOmzetData[] = $v['omzet'];
+    $trendLabaData[] = $v['laba'];
+}
+
+/* ==================================================================
+   Komposisi pembayaran seluruh unit
+   ================================================================== */
+$payRows = all("SELECT " . qmas_laporan_status_sql() . " status, bank, total_amount FROM qmas_transactions
+        WHERE DATE(transaction_date) BETWEEN ? AND ?
+    UNION ALL
+    SELECT payment_status, NULL, total_amount FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+    UNION ALL
+    SELECT payment_method, NULL, total_amount FROM daqam_orders
+        WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?",
+    [$from, $to, $from, $to, $from, $to]);
+$methodLabel = static fn(string $status): string => $status === 'qris' ? 'QRIS' : ucfirst($status);
+
+$payMap = [];
+foreach ($payRows as $r) {
+    $label = $r['bank'] ? payment_label((string) $r['status'], $r['bank']) : $methodLabel((string) $r['status']);
+    $payMap[$label] = ($payMap[$label] ?? 0) + (float) $r['total_amount'];
+}
+arsort($payMap);
+$payLabels = array_keys($payMap);
+$payData = array_values($payMap);
+
+/* ==================================================================
+   Transaksi terbaru seluruh unit (dalam rentang)
+   ================================================================== */
 $recent = all("SELECT * FROM (
-    SELECT 'Qmas Air Mineral' AS unit, transaction_no AS no, transaction_date AS waktu, customer_name AS nama, total_amount AS total,
-           CASE WHEN payment_status = 'transfer' OR (payment_status='tunai' AND DATE(transaction_date)<'".LAPORAN_TUNAI_SEJAK."') THEN CONCAT('Transfer (', IFNULL(bank,'-'), ')') ELSE payment_status END AS keterangan,
-           'qmas' AS code FROM qmas_transactions
-    UNION ALL
-    SELECT 'SM Corner', transaction_no, transaction_date, customer_name, total_amount, payment_method, 'smcorner' FROM sm_transactions
-    UNION ALL
-    SELECT 'Daqam Caffe', order_no, order_date, CONCAT(order_type,' ',IFNULL(table_no,'')), total_amount, payment_method, 'daqam' FROM daqam_orders
-) x ORDER BY waktu DESC LIMIT 10");
-
-$piutang = val('SELECT COUNT(*) FROM qmas_transactions WHERE payment_status="piutang"');
-
-$trend = all("SELECT DATE_FORMAT(waktu,'%Y-%m') periode, SUM(total) omzet FROM (
-    SELECT transaction_date waktu, total_amount total FROM qmas_transactions
-    UNION ALL SELECT transaction_date, total_amount FROM sm_transactions
-    UNION ALL SELECT order_date, total_amount FROM daqam_orders WHERE status='selesai'
-) x WHERE waktu >= DATE_SUB(CURDATE(), INTERVAL 11 MONTH) GROUP BY DATE_FORMAT(waktu,'%Y-%m') ORDER BY periode");
-$trendLabels = []; $trendData = [];
-foreach ($trend as $t) { $trendLabels[] = date('M Y', strtotime($t['periode'].'-01')); $trendData[] = (float) $t['omzet']; }
-
-$comp = all("SELECT ".qmas_laporan_status_sql()." AS status, bank, SUM(total_amount) total FROM qmas_transactions GROUP BY status, bank ORDER BY total DESC");
-$compLabels = []; $compData = [];
-foreach ($comp as $c) { $compLabels[] = payment_label($c['status'], $c['bank']); $compData[] = (float) $c['total']; }
-
-$unitLabels = []; $unitData = []; $unitColors = [];
-foreach ($omzet as $o) { $u = unit_by_code($o['code']); $unitLabels[] = $u['name'] ?? $o['code']; $unitData[] = (float) $o['today']; $unitColors[] = '#0E9F90'; }
+      SELECT 'Qmas Air Mineral' unit, transaction_no no, transaction_date waktu, customer_name nama,
+             total_amount total, payment_status status, bank, 'qmas' code
+        FROM qmas_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+      UNION ALL
+      SELECT 'SM Corner', transaction_no, transaction_date, customer_name, total_amount,
+             payment_method, NULL, 'smcorner'
+        FROM sm_transactions WHERE DATE(transaction_date) BETWEEN ? AND ?
+      UNION ALL
+      SELECT 'Daqam Caffe', order_no, order_date, CONCAT(order_type,' ',IFNULL(table_no,'')),
+             total_amount, payment_method, NULL, 'daqam'
+        FROM daqam_orders WHERE status='selesai' AND DATE(order_date) BETWEEN ? AND ?
+    ) x ORDER BY waktu DESC LIMIT 10", [$from, $to, $from, $to, $from, $to]);
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -61,29 +185,74 @@ require_once __DIR__ . '/../../includes/header.php';
     <div>
         <div class="section-eyebrow">Pimpinan BUMK UMGO</div>
         <h1 class="section-title"><i class="bi bi-bar-chart-line text-success"></i> Ringkasan Omzet Gabungan</h1>
-        <div class="page-sub"><i class="bi bi-calendar3"></i> <?= date('d F Y') ?> · Data seluruh unit usaha</div>
+        <div class="page-sub"><i class="bi bi-calendar3"></i> <?= e($from) ?> s/d <?= e($to) ?> · Data seluruh unit usaha</div>
     </div>
-    <a href="<?= base_url('/modules/portal/index.php') ?>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Portal</a>
+    <div class="d-flex gap-2">
+        <a href="<?= base_url('/modules/pengaturan/akun.php') ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-people"></i> Kelola Akun</a>
+        <a href="<?= base_url('/modules/portal/index.php') ?>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Portal</a>
+    </div>
 </div>
 
+<div class="card content-card mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold" for="tgl_from">Dari</label>
+                <input type="date" id="tgl_from" name="from" class="form-control form-control-sm" value="<?= e($from) ?>">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold" for="tgl_to">Sampai</label>
+                <input type="date" id="tgl_to" name="to" class="form-control form-control-sm" value="<?= e($to) ?>">
+            </div>
+            <div class="col-md-auto"><button class="btn btn-sm btn-success"><i class="bi bi-funnel"></i> Tampilkan</button></div>
+        </form>
+        <div class="mt-3 d-flex flex-wrap gap-2">
+            <?php foreach ($presets as $label => [$pFrom, $pTo]): ?>
+                <a href="<?= base_url('/modules/superadmin/dashboard.php?from=' . $pFrom . '&to=' . $pTo) ?>"
+                   class="btn btn-sm <?= ($from === $pFrom && $to === $pTo) ? 'btn-success' : 'btn-outline-secondary' ?>"><?= e($label) ?></a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</div>
+
+<?php
+$kpiCard = static function (string $label, string $value, string $foot, string $icon, string $iconClass, string $valueClass, string $trend = '', bool $danger = false): void {
+    echo '<div class="col-md-3"><div class="card kpi-card p-3">';
+    echo '<div class="d-flex justify-content-between"><span class="kpi-label">' . e($label) . '</span>';
+    echo '<span class="kpi-icon ' . e($iconClass) . '"><i class="bi ' . e($icon) . '"></i></span></div>';
+    echo '<div class="kpi-value ' . e($valueClass) . '">' . e($value) . '</div>';
+    if ($foot !== '') echo '<div class="kpi-foot">' . e($foot) . '</div>';
+    if ($trend !== '') {
+        echo '<div class="kpi-trend' . ($danger ? ' danger' : '') . '"><i class="bi ' . ($danger ? 'bi-exclamation-triangle' : 'bi-check-circle') . '"></i> ' . e($trend) . '</div>';
+    }
+    echo '</div></div>';
+};
+
+?>
+
 <div class="row g-3 mb-4">
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET HARI INI</span><span class="kpi-icon bg-success-subtle text-success"><i class="bi bi-cash-coin"></i></span></div><div class="kpi-value text-success"><?= rupiah($grandToday) ?></div><div class="kpi-foot">Bulan ini <?= rupiah($grandMonth) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">OMZET BULAN INI</span><span class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-calendar-check"></i></span></div><div class="kpi-value text-primary"><?= rupiah($grandMonth) ?></div><div class="kpi-foot">Total keseluruhan <?= rupiah($grandTotal) ?></div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">TOTAL TRANSAKSI</span><span class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-receipt"></i></span></div><div class="kpi-value"><?= angka($grandTrx) ?> <small class="fs-6 text-muted">trx</small></div><div class="kpi-foot">Rata-rata <?= rupiah($avgTrx) ?> / transaksi</div></div></div>
-    <div class="col-md-3"><div class="card kpi-card p-3"><div class="d-flex justify-content-between"><span class="kpi-label">PIUTANG QMAS</span><span class="kpi-icon bg-danger-subtle text-danger"><i class="bi bi-exclamation-triangle"></i></span></div><div class="kpi-value text-danger"><?= angka($piutang) ?> <small class="fs-6 text-muted">nota</small></div><?php if ($piutang > 0): ?><div class="kpi-trend danger"><i class="bi bi-arrow-up-right"></i> Perlu ditindaklanjuti</div><?php else: ?><div class="kpi-trend"><i class="bi bi-check-circle"></i> Tidak ada piutang</div><?php endif; ?></div></div>
+    <?php
+    $kpiCard('OMZET PERIODE', rupiah($grandOmzet), 'Hari ini ' . rupiah($todayOmzet), 'bi-cash-coin', 'bg-success-subtle text-success', 'text-success');
+    $kpiCard('LABA PERIODE', rupiah($grandLaba), 'Margin ' . number_format($margin, 1, ',', '.') . '% · Qmas + SM', 'bi-graph-up-arrow', 'bg-primary-subtle text-primary', 'text-success');
+    $kpiCard('TOTAL TRANSAKSI', angka($grandTrx) . ' trx', 'Rata-rata ' . rupiah($avgTrx) . ' / transaksi', 'bi-receipt', 'bg-warning-subtle text-warning', '');
+    $kpiCard('PIUTANG & HUTANG', rupiah($tagihan), 'Piutang ' . rupiah($piutang) . ' · Hutang ' . rupiah($hutang), 'bi-exclamation-triangle', 'bg-danger-subtle text-danger', 'text-danger', $tagihan > 0 ? ($piutangNota + $hutangNota) . ' nota perlu ditindaklanjuti' : 'Tidak ada tagihan', $tagihan > 0);
+    ?>
 </div>
 
 <div class="row g-3 mb-4">
     <div class="col-lg-8">
         <div class="card content-card h-100"><div class="card-body">
-            <div class="chart-title"><i class="bi bi-graph-up"></i> Tren Omzet Gabungan (12 Bulan Terakhir)</div>
-            <div class="chart-box"><?= chart('line', $trendLabels, [['label' => 'Omzet', 'data' => $trendData, 'color' => '#0B4F3E']]) ?></div>
+            <div class="chart-title"><i class="bi bi-graph-up"></i> Tren Omzet & Laba</div>
+            <div class="chart-box"><?= chart('line', $trendLabels, [
+                ['label' => 'Omzet', 'data' => $trendOmzetData],
+                ['label' => 'Laba', 'data' => $trendLabaData],
+            ]) ?></div>
         </div></div>
     </div>
     <div class="col-lg-4">
         <div class="card content-card h-100"><div class="card-body">
-            <div class="chart-title"><i class="bi bi-pie-chart"></i> Komposisi Pembayaran Qmas</div>
-            <div class="chart-box"><?= chart('doughnut', $compLabels, [['label' => 'Total', 'data' => $compData]]) ?></div>
+            <div class="chart-title"><i class="bi bi-pie-chart"></i> Komposisi Pembayaran (Semua Unit)</div>
+            <div class="chart-box"><?= chart('doughnut', $payLabels, [['label' => 'Total', 'data' => $payData]]) ?></div>
         </div></div>
     </div>
 </div>
@@ -93,23 +262,23 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="card content-card h-100">
             <div class="card-header">Kontribusi Omzet per Unit</div>
             <div class="card-body p-4">
-                <div class="chart-box sm mb-3"><?= chart('bar', $unitLabels, [['label' => 'Omzet hari ini', 'data' => $unitData, 'color' => '#0B4F3E', 'colors' => $unitColors]]) ?></div>
-                <?php foreach ($omzet as $o):
-                    $u = unit_by_code($o['code']);
-                    $pct = $grandToday > 0 ? ((float)$o['today'] / $grandToday) * 100 : 0; ?>
+                <?php foreach (['qmas', 'smcorner', 'daqam'] as $code):
+                    $v = $byCode[$code] ?? ['omzet' => 0.0, 'trx' => 0];
+                    $pct = $grandOmzet > 0 ? ($v['omzet'] / $grandOmzet) * 100 : 0;
+                ?>
                     <div class="mb-4">
                         <div class="d-flex justify-content-between small mb-1">
-                            <span class="fw-semibold"><?= e($u['name'] ?? $o['code']) ?></span>
-                            <span><?= rupiah($o['today']) ?></span>
+                            <span class="fw-semibold"><?= e($unitMeta[$code]) ?></span>
+                            <span><?= rupiah($v['omzet']) ?></span>
                         </div>
                         <div class="progress" style="height:10px">
                             <div class="progress-bar" role="progressbar" style="width:<?= min(100, $pct) ?>%"></div>
                         </div>
-                        <div class="small text-muted mt-1">Bulan ini <?= rupiah($o['month']) ?> · <?= angka($o['trx']) ?> transaksi</div>
+                        <div class="small text-muted mt-1">Hari ini <?= rupiah($todayByCode[$code] ?? 0) ?> · <?= angka($v['trx']) ?> transaksi</div>
                     </div>
                 <?php endforeach; ?>
                 <hr>
-                <div class="d-flex justify-content-between fw-bold"><span>Total Keseluruhan</span><span class="text-success"><?= rupiah($grandTotal) ?></span></div>
+                <div class="d-flex justify-content-between fw-bold"><span>Total Periode</span><span class="text-success"><?= rupiah($grandOmzet) ?></span></div>
             </div>
         </div>
     </div>
@@ -120,21 +289,35 @@ require_once __DIR__ . '/../../includes/header.php';
                 <table class="table table-sm table-hover mb-0 align-middle">
                     <thead class="table-light"><tr><th>Unit</th><th>No. Transaksi</th><th>Waktu</th><th>Pelanggan</th><th class="text-end">Total</th><th>Ket.</th></tr></thead>
                     <tbody>
-                    <?php if (!$recent): ?><tr><td colspan="6" class="empty-state">Belum ada transaksi.</td></tr><?php endif; ?>
-                    <?php foreach ($recent as $r): ?>
+                    <?php if (!$recent): ?><tr><td colspan="6" class="empty-state">Belum ada transaksi pada rentang ini.</td></tr><?php endif; ?>
+                    <?php foreach ($recent as $r):
+                        $ket = $r['code'] === 'qmas'
+                            ? payment_label(qmas_laporan_status((string) $r['status'], $r['waktu']), $r['bank'])
+                            : $methodLabel((string) $r['status']);
+                    ?>
                         <tr>
                             <td><span class="badge text-white" style="background:var(--brand-teal)"><?= e(explode(' ', $r['unit'])[0]) ?></span></td>
                             <td class="small"><?= e($r['no']) ?></td>
                             <td class="small"><?= tgl($r['waktu'], true) ?></td>
                             <td class="small"><?= e($r['nama']) ?></td>
                             <td class="text-end fw-semibold"><?= rupiah($r['total']) ?></td>
-                            <td class="small"><?= e($r['keterangan']) ?></td>
+                            <td class="small"><?= e($ket) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
         </div>
+    </div>
+</div>
+
+<div class="card content-card mt-3">
+    <div class="card-header"><i class="bi bi-lightning-charge"></i> Akses Cepat</div>
+    <div class="card-body d-flex flex-wrap gap-2">
+        <a class="btn btn-sm btn-outline-success" href="<?= base_url('/modules/qmas/dashboard.php') ?>"><i class="bi bi-droplet"></i> Dashboard Qmas</a>
+        <a class="btn btn-sm btn-outline-success" href="<?= base_url('/modules/smcorner/kasir.php') ?>"><i class="bi bi-cart3"></i> Kasir SM Corner</a>
+        <a class="btn btn-sm btn-outline-success" href="<?= base_url('/modules/daqam/kasir.php') ?>"><i class="bi bi-cup-hot"></i> Kasir Daqam</a>
+        <a class="btn btn-sm btn-outline-primary" href="<?= base_url('/modules/pengaturan/akun.php') ?>"><i class="bi bi-people"></i> Kelola Akun</a>
     </div>
 </div>
 

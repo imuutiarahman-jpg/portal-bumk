@@ -102,7 +102,8 @@ Portal Utama (landing: header 80px, hero 280px, 3 kartu unit, footer 70px)
 - Laporan shift kasir (uang laci vs sistem vs QRIS) + export CSV
 
 ### Pimpinan
-- Dashboard omzet gabungan (hari ini, bulan ini, total) + kontribusi per unit + transaksi terbaru seluruh unit
+- Dashboard omzet gabungan dengan filter periode (Bulan ini / 3 Bulan / Tahun ini / per tahun): omzet & laba (Qmas + SM), piutang Qmas + hutang supplier (Qmas & SM), komposisi pembayaran seluruh unit, kontribusi per unit, 10 transaksi terbaru, dan akses cepat ke unit & Kelola Akun
+- Sidebar superadmin: menu tiap unit usaha dikompres jadi dropdown yang otomatis terbuka pada unit yang sedang dibuka
 
 ## 5. Struktur Folder
 

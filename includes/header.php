@@ -121,10 +121,17 @@ $unitMenus = [
                 <a href="<?= base_url('/modules/superadmin/dashboard.php') ?>" class="sidebar-link <?= str_contains($_SERVER['PHP_SELF'], 'superadmin/dashboard') ? 'active' : '' ?>"><i class="bi bi-bar-chart-line"></i> Omzet Gabungan</a>
                 <div class="sidebar-label mt-3">UNIT USAHA</div>
                 <?php foreach (['qmas', 'smcorner', 'daqam'] as $code): $u = unit_by_code($code); ?>
-                    <div class="sidebar-unit"><?= e($u['name'] ?? $code) ?></div>
-                    <?php foreach ($unitMenus[$code] as $file => $label): ?>
-                        <a href="<?= base_url('/modules/' . $code . '/' . $file) ?>" class="sidebar-link sub <?= $activeUnit === $code && $currentFile === $file ? 'active' : '' ?>"><?= e($label) ?></a>
-                    <?php endforeach; ?>
+                    <details class="sidebar-group" <?= $activeUnit === $code ? 'open' : '' ?>>
+                        <summary class="sidebar-unit-toggle">
+                            <span><?= e($u['name'] ?? $code) ?></span>
+                            <i class="bi bi-chevron-down"></i>
+                        </summary>
+                        <div class="sidebar-group-links">
+                            <?php foreach ($unitMenus[$code] as $file => $label): ?>
+                                <a href="<?= base_url('/modules/' . $code . '/' . $file) ?>" class="sidebar-link sub <?= $activeUnit === $code && $currentFile === $file ? 'active' : '' ?>"><?= e($label) ?></a>
+                            <?php endforeach; ?>
+                        </div>
+                    </details>
                 <?php endforeach; ?>
             <?php elseif (isset($unitMenus[$user['unit_code']])):
                 $code = $user['unit_code']; $u = unit_by_code($code); ?>
