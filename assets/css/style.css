@@ -782,6 +782,12 @@ body.public-menu-open .public-menu { transform: translateY(0); opacity: 1; visib
 [data-theme="dark"] .list-group-item { background: var(--card); color: var(--ink); border-color: var(--line); }
 [data-theme="dark"] .nav-tabs .nav-link.active, [data-theme="dark"] .nav-pills .nav-link.active { background: var(--brand-teal); border-color: var(--brand-teal); }
 [data-theme="dark"] .progress { background: var(--surface); }
+[data-theme="dark"] .dropdown-menu { background: var(--surface); color: var(--ink); border-color: var(--line); }
+[data-theme="dark"] .dropdown-item { color: var(--ink); }
+[data-theme="dark"] .dropdown-item:hover, [data-theme="dark"] .dropdown-item:focus { background: var(--brand-teal-soft); color: var(--ink); }
+[data-theme="dark"] .dropdown-divider { border-color: var(--line); }
+[data-theme="dark"] .pagination .page-link { background: var(--surface); color: var(--ink); border-color: var(--line); }
+[data-theme="dark"] .pagination .active .page-link { background: var(--brand-teal); border-color: var(--brand-teal); color: #fff; }
 [data-theme="dark"] .login-logo-wrap { background: #fff; }
 [data-theme="dark"] .empty-state { color: var(--subtle); }
 [data-theme="dark"] .kpi-icon { background: var(--surface) !important; color: var(--accent) !important; }

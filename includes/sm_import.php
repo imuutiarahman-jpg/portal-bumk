@@ -79,6 +79,7 @@ function sm_import_ensure_schema(): void
             'max_price' => 'DECIMAL(12,2) NOT NULL DEFAULT 0',
             'source_created_at' => 'DATETIME NULL',
         ],
+        'sm_product_variants' => ['cost' => 'DECIMAL(12,2) NOT NULL DEFAULT 0'],
         'sm_transaction_items' => ['variant_id' => 'BIGINT NULL'],
         'sm_purchase_items' => ['variant_id' => 'BIGINT NULL'],
     ];
@@ -98,6 +99,34 @@ function sm_import_ensure_schema(): void
         $exists = val('SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?', [$table, $index]);
         if (!$exists) $pdo->exec("CREATE INDEX `{$index}` ON `{$table}` (`{$col}`)");
     }
+}
+
+/**
+ * Nilai inventaris & HPP dengan satu dasar yang konsisten:
+ * produk yang punya varian memakai nilai varian, selain itu memakai nilai produk.
+ * HPP varian memakai cost varian bila sudah diisi, kalau tidak fallback ke cost produk.
+ */
+function sm_inventory_values(): array
+{
+    $rows = all('SELECT p.stock, p.price, p.cost,
+        (SELECT COUNT(*) FROM sm_product_variants v WHERE v.product_id=p.id) variant_count,
+        (SELECT COALESCE(SUM(v.stock*v.price),0) FROM sm_product_variants v WHERE v.product_id=p.id) variant_value,
+        (SELECT COALESCE(SUM(v.stock*CASE WHEN v.cost>0 THEN v.cost ELSE p.cost END),0)
+           FROM sm_product_variants v WHERE v.product_id=p.id) variant_cost
+        FROM sm_products p');
+
+    $inventory = 0.0;
+    $hpp = 0.0;
+    foreach ($rows as $r) {
+        if ((int) $r['variant_count'] > 0) {
+            $inventory += (float) $r['variant_value'];
+            $hpp += (float) $r['variant_cost'];
+        } else {
+            $inventory += (int) $r['stock'] * (float) $r['price'];
+            $hpp += (int) $r['stock'] * (float) $r['cost'];
+        }
+    }
+    return ['inventory' => $inventory, 'hpp' => $hpp];
 }
 
 /** Cari tab berisi semua kata kunci pada satu baris header. */

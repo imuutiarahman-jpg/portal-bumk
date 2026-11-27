@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($items as $it) {
                 run('INSERT INTO sm_purchase_items (purchase_id,product_id,variant_id,quantity,unit_price,subtotal) VALUES (?,?,?,?,?,?)',
                     [$purchaseId, $it['product']['id'], $it['variant_id'] ?: null, $it['qty'], $it['price'], $it['subtotal']]);
-                if ($it['variant_id']) run('UPDATE sm_product_variants SET stock = stock + ? WHERE id=?', [$it['qty'], $it['variant_id']]);
+                if ($it['variant_id']) run('UPDATE sm_product_variants SET stock = stock + ?, cost = ? WHERE id=?', [$it['qty'], $it['price'], $it['variant_id']]);
                 run('UPDATE sm_products SET stock = stock + ?, cost = ? WHERE id=?', [$it['qty'], $it['price'], $it['product']['id']]);
             }
             $pdo->commit();

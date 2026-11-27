@@ -47,7 +47,7 @@ foreach ($products as $p) {
             'size' => $v ? (string) $v['size_name'] : (string) $p['size'],
             'price' => $v ? (float) $v['price'] : (float) $p['price'],
             'stock' => $v ? (int) $v['stock'] : (int) $p['stock'],
-            'cost' => (float) $p['cost'],
+            'cost' => ($v && (float) $v['cost'] > 0) ? (float) $v['cost'] : (float) $p['cost'],
             'category_id' => $catId,
             'category_name' => $catName,
         ];
