@@ -38,9 +38,11 @@ require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <section class="hero-split" id="hero" aria-labelledby="heroTitle">
-    <div class="hero-visual">
+    <div class="hero-visual with-illustration">
         <div class="visual-glow" aria-hidden="true"></div>
         <div class="visual-orbit" aria-hidden="true"><i class="bi bi-diagram-3"></i></div>
+        <img src="<?= base_url('/gambar/' . rawurlencode('Friendly Small Business E-Commerce Scene.png')) ?>"
+             alt="Ilustrasi pelaku usaha BUMK UMGO dalam aktivitas penjualan" class="hero-illustration">
         <div class="visual-logos">
             <img src="<?= base_url('/logo/images.png') ?>" alt="Lambang UMGO" class="visual-logo umgo">
             <span class="visual-logo-wrap"><img src="<?= base_url('/logo/logobumk.jpeg') ?>" alt="Logo BUMK UMGO" class="visual-logo bumk"></span>
