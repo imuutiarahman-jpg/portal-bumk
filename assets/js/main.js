@@ -23,7 +23,30 @@ document.addEventListener('DOMContentLoaded', function () {
         link.addEventListener('click', function () { setSidebar(false); });
     });
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') setSidebar(false, true);
+        if (e.key === 'Escape') { setSidebar(false, true); setPublicMenu(false, true); }
+    });
+
+    // Drawer menu publik (mobile)
+    var publicToggle = document.getElementById('publicMenuToggle');
+    var publicMenu = document.getElementById('publicMenu');
+    var publicOverlay = document.getElementById('publicMenuOverlay');
+    function setPublicMenu(open, restoreFocus) {
+        var wasOpen = document.body.classList.contains('public-menu-open');
+        document.body.classList.toggle('public-menu-open', open);
+        if (publicToggle) publicToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open && !wasOpen) {
+            var first = publicMenu && publicMenu.querySelector('.public-menu-link');
+            if (first) first.focus();
+        } else if (!open && wasOpen && restoreFocus && publicToggle) {
+            publicToggle.focus();
+        }
+    }
+    if (publicToggle) publicToggle.addEventListener('click', function () {
+        setPublicMenu(!document.body.classList.contains('public-menu-open'));
+    });
+    if (publicOverlay) publicOverlay.addEventListener('click', function () { setPublicMenu(false, true); });
+    if (publicMenu) publicMenu.querySelectorAll('a').forEach(function (link) {
+        link.addEventListener('click', function () { setPublicMenu(false); });
     });
 
     // Tampilkan / sembunyikan password

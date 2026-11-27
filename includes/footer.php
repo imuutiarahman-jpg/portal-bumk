@@ -18,6 +18,6 @@ $user = current_user();
 </footer>
 
 <script src="<?= base_url('/assets/js/charts.js') ?>?v=3"></script>
-<script src="<?= base_url('/assets/js/main.js') ?>?v=5"></script>
+<script src="<?= base_url('/assets/js/main.js') ?>?v=6"></script>
 </body>
 </html>

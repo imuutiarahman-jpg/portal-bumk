@@ -58,7 +58,7 @@ $unitMenus = [
     </script>
     <link href="<?= base_url('/assets/vendor/bootstrap/bootstrap.min.css') ?>?v=1" rel="stylesheet" onerror="this.href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css'">
     <link href="<?= base_url('/assets/vendor/bootstrap-icons/bootstrap-icons.min.css') ?>?v=1" rel="stylesheet">
-    <link href="<?= base_url('/assets/css/style.css') ?>?v=16" rel="stylesheet">
+    <link href="<?= base_url('/assets/css/style.css') ?>?v=17" rel="stylesheet">
     <script src="<?= base_url('/assets/vendor/bootstrap/bootstrap.bundle.min.js') ?>?v=2"></script>
     <script>window.bootstrap || document.write('<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"><\/script>');</script>
     <script src="<?= base_url('/assets/vendor/chartjs/chart.umd.min.js') ?>?v=1"></script>
@@ -79,14 +79,17 @@ $unitMenus = [
         <nav class="header-nav d-flex align-items-center gap-2" aria-label="Navigasi utama">
             <button type="button" class="btn btn-sm btn-outline-secondary theme-toggle" id="themeToggle" aria-label="Ganti mode tampilan" title="Ganti mode gelap/terang"><i class="bi bi-moon-stars"></i></button>
             <?php if ($isPublic): ?>
-                <a class="public-nav-link <?= $currentFile === 'index.php' ? 'active' : '' ?>" href="<?= base_url('/modules/portal/index.php') ?>" <?= $currentFile === 'index.php' ? 'aria-current="page"' : '' ?>>Beranda</a>
-                <a class="public-nav-link <?= $currentFile === 'unit.php' ? 'active' : '' ?>" href="<?= base_url('/modules/portal/unit.php') ?>" <?= $currentFile === 'unit.php' ? 'aria-current="page"' : '' ?>>Unit Usaha</a>
-                <a class="public-nav-link <?= $currentFile === 'panduan.php' ? 'active' : '' ?>" href="<?= base_url('/modules/portal/panduan.php') ?>" <?= $currentFile === 'panduan.php' ? 'aria-current="page"' : '' ?>>Panduan</a>
-                <?php if ($user): ?>
-                    <a class="btn btn-sm btn-brand" href="<?= base_url(dashboard_path()) ?>"><i class="bi bi-speedometer2"></i> Dashboard Saya</a>
-                <?php else: ?>
-                    <a class="btn btn-sm btn-brand" href="<?= base_url('/modules/auth/login.php') ?>"><i class="bi bi-shield-lock"></i> Masuk</a>
-                <?php endif; ?>
+                <div class="public-nav-desktop d-flex align-items-center gap-2">
+                    <a class="public-nav-link <?= $currentFile === 'index.php' ? 'active' : '' ?>" href="<?= base_url('/modules/portal/index.php') ?>" <?= $currentFile === 'index.php' ? 'aria-current="page"' : '' ?>>Beranda</a>
+                    <a class="public-nav-link <?= $currentFile === 'unit.php' ? 'active' : '' ?>" href="<?= base_url('/modules/portal/unit.php') ?>" <?= $currentFile === 'unit.php' ? 'aria-current="page"' : '' ?>>Unit Usaha</a>
+                    <a class="public-nav-link <?= $currentFile === 'panduan.php' ? 'active' : '' ?>" href="<?= base_url('/modules/portal/panduan.php') ?>" <?= $currentFile === 'panduan.php' ? 'aria-current="page"' : '' ?>>Panduan</a>
+                    <?php if ($user): ?>
+                        <a class="btn btn-sm btn-brand" href="<?= base_url(dashboard_path()) ?>"><i class="bi bi-speedometer2"></i> Dashboard Saya</a>
+                    <?php else: ?>
+                        <a class="btn btn-sm btn-brand" href="<?= base_url('/modules/auth/login.php') ?>"><i class="bi bi-shield-lock"></i> Masuk</a>
+                    <?php endif; ?>
+                </div>
+                <button type="button" class="btn public-menu-btn" id="publicMenuToggle" aria-label="Buka menu navigasi" aria-expanded="false" aria-controls="publicMenu"><i class="bi bi-list"></i></button>
             <?php else: ?>
                 <a class="btn btn-sm btn-outline-secondary" href="<?= base_url('/modules/portal/index.php') ?>" <?= str_contains($_SERVER['PHP_SELF'], '/portal/') ? 'aria-current="page"' : '' ?>><i class="bi bi-house-door"></i> <span class="d-none d-sm-inline">Beranda</span></a>
                 <?php if ($user): ?>
@@ -104,6 +107,22 @@ $unitMenus = [
         </nav>
     </div>
 </header>
+
+<?php if ($isPublic): ?>
+<div class="public-menu-overlay" id="publicMenuOverlay" aria-hidden="true"></div>
+<div class="public-menu" id="publicMenu" aria-label="Menu navigasi portal">
+    <div class="public-menu-head">MENU PORTAL</div>
+    <a class="public-menu-link <?= $currentFile === 'index.php' ? 'active' : '' ?>" href="<?= base_url('/modules/portal/index.php') ?>" <?= $currentFile === 'index.php' ? 'aria-current="page"' : '' ?>><i class="bi bi-house-door"></i> Beranda</a>
+    <a class="public-menu-link <?= $currentFile === 'unit.php' ? 'active' : '' ?>" href="<?= base_url('/modules/portal/unit.php') ?>" <?= $currentFile === 'unit.php' ? 'aria-current="page"' : '' ?>><i class="bi bi-grid-1x2"></i> Unit Usaha</a>
+    <a class="public-menu-link <?= $currentFile === 'panduan.php' ? 'active' : '' ?>" href="<?= base_url('/modules/portal/panduan.php') ?>" <?= $currentFile === 'panduan.php' ? 'aria-current="page"' : '' ?>><i class="bi bi-question-circle"></i> Panduan</a>
+    <div class="public-menu-divider"></div>
+    <?php if ($user): ?>
+        <a class="btn btn-brand w-100" href="<?= base_url(dashboard_path()) ?>"><i class="bi bi-speedometer2"></i> Dashboard Saya</a>
+    <?php else: ?>
+        <a class="btn btn-brand w-100" href="<?= base_url('/modules/auth/login.php') ?>"><i class="bi bi-shield-lock"></i> Masuk Sistem</a>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <?php if (!$isPublic && $user): ?>
 <div class="sidebar-overlay" id="sidebarOverlay"></div>

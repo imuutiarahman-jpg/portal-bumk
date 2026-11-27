@@ -21,7 +21,7 @@ require_once __DIR__ . '/../../includes/header.php';
         </div>
         <?php foreach ($units as $u):
             $unit = unit_by_code($u['code']); ?>
-            <span class="hero-badge b<?= $u['code'] === 'qmas' ? '1' : ($u['code'] === 'smcorner' ? '2' : '3') ?>"><i class="bi <?= e($u['icon']) ?>"></i> <?= e($unit['name'] ?? $u['code']) ?></span>
+            <span class="hero-badge b<?= $u['code'] === 'qmas' ? '1' : ($u['code'] === 'smcorner' ? '2' : '3') ?>"><i class="bi <?= e($u['icon']) ?>"></i> <span class="badge-full"><?= e($unit['name'] ?? $u['code']) ?></span><span class="badge-short"><?= e($u['short']) ?></span></span>
         <?php endforeach; ?>
     </div>
     <div class="hero-panel">
