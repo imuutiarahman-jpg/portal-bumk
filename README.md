@@ -89,7 +89,7 @@ Portal Utama (landing: header 80px, hero 280px, 3 kartu unit, footer 70px)
 - KPI: penjualan ritel, produk terlaris, low stock, nilai inventaris, pembelian bulan ini
 - Katalog & kategori: kain & seragam, kemeja/batik/jas, perlengkapan HW
 - SKU ukuran S–XXXL dan satuan meteran; kelola produk (Ubah/Hapus permanen) + **HPP**
-- Kasir POS dengan pencarian cepat + cetak struk
+- Kasir POS: pencarian barang (nama/SKU/ukuran/kategori) yang langsung menambah baris, input tanggal transaksi (bisa backdated), beberapa produk dalam satu transaksi, dan cetak struk
 - **Pembelian / Stok Masuk**: nota supplier (Tunai/Transfer/Piutang + bank), stok & HPP otomatis, riwayat + laporan pembelian export CSV
 - **Rekap Bulanan**: omzet, HPP, laba per bulan + chart + export CSV
 - **Import Katalog Lengkap**: cukup tempel link Google Sheets → semua tab diambil sekaligus (XLSX): `Master Kategori` → `sm_categories`, `Katalog Produk` → `sm_products` (SKU unik), `Detail Stok & Harga` → `sm_product_variants`, `Riwayat Stok` → `sm_stock_history`, `Ringkasan` → `sm_catalog_summary`. Ada pratinjau + peringatan kualitas data sebelum commit. File CSV (tab ringkasan saja) tetap diterima sebagai fallback. Skema dibuat otomatis saat halaman import/kasir/pembelian dibuka.
